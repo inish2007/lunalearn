@@ -29,7 +29,7 @@ async function testConnection() {
 
   console.log('\n2. Testing Connection to Supabase REST / Auth...');
   try {
-    const { data: authData, error: authError } = await supabase.auth.getSession();
+    const { error: authError } = await supabase.auth.getSession();
     if (authError) {
       console.warn(`   ⚠️ Auth ping warning: ${authError.message}`);
     } else {

@@ -1,7 +1,7 @@
 /**
 -- ==============================================================================
 -- LunaLearn Database TypeScript Definitions
--- Automatically mapped to Phase 1 Supabase Postgres Schema
+-- Automatically mapped to Phase 1 Supabase Postgres Schema & CONTRACTS
 -- ==============================================================================
 */
 
@@ -131,6 +131,35 @@ export interface StudySession {
   started_at: string;
   ended_at: string | null;
   created_at: string;
+}
+
+// ==============================================================================
+// Academic Engine Contracts (plan.md Layer 4 & person-2-backend/AGENTS.md)
+// ==============================================================================
+
+export type RiskType = 'HIGH_EXAM_RISK' | 'DEADLINE_RISK' | 'PERFORMANCE_RISK' | 'WORKLOAD_RISK';
+export type RiskSeverity = 'high' | 'medium' | 'low';
+
+export interface AcademicRisk {
+  type: RiskType;
+  reason: string;
+  severity: RiskSeverity;
+  subject_id?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface ReadinessBreakdown {
+  topic_completion: number;      // 40% weight
+  quiz_performance: number;      // 30% weight
+  revision_activity: number;     // 20% weight
+  assignment_completion: number; // 10% weight
+}
+
+export interface SubjectReadiness {
+  subject_id: string;
+  readiness_percentage: number;
+  breakdown: ReadinessBreakdown;
+  risks: AcademicRisk[];
 }
 
 // Database schema representation for Supabase Client generics

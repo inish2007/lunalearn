@@ -226,7 +226,10 @@ CREATE INDEX IF NOT EXISTS idx_study_sessions_started ON study_sessions(started_
 -- ==============================================================================
 
 CREATE OR REPLACE FUNCTION handle_new_user()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
 BEGIN
     INSERT INTO public.profiles (id, email, full_name, avatar_url)
     VALUES (
@@ -238,7 +241,7 @@ BEGIN
     ON CONFLICT (id) DO NOTHING;
     RETURN NEW;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql;
 
 DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 CREATE TRIGGER on_auth_user_created
@@ -277,6 +280,11 @@ ON profiles FOR UPDATE
 TO authenticated
 USING (auth.uid() = id)
 WITH CHECK (auth.uid() = id);
+
+CREATE POLICY "Users can delete their own profile"
+ON profiles FOR DELETE
+TO authenticated
+USING (auth.uid() = id);
 
 -- SUBJECTS POLICIES
 CREATE POLICY "Users can manage their own subjects"

@@ -404,7 +404,28 @@ export interface Database {
       };
     };
     Views: Record<string, never>;
-    Functions: Record<string, never>;
+    Functions: {
+      match_document_chunks: {
+        Args: {
+          query_embedding: number[];
+          match_count?: number;
+          filter_profile_id?: string;
+          filter_subject_id?: string | null;
+          filter_material_id?: string | null;
+          similarity_threshold?: number;
+        };
+        Returns: {
+          id: string;
+          material_id: string;
+          content: string;
+          chunk_index: number;
+          page_number: number | null;
+          metadata: Record<string, unknown>;
+          similarity: number;
+        }[];
+      };
+    };
     Enums: Record<string, never>;
   };
 }
+

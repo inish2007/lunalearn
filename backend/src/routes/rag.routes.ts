@@ -62,7 +62,7 @@ function parseMultipartForm(req: http.IncomingMessage): Promise<{
 /**
  * Parses JSON request bodies with payload limits.
  */
-function parseJson(req: http.IncomingMessage): Promise<any> {
+function parseJson<T = unknown>(req: http.IncomingMessage): Promise<T> {
   return new Promise((resolve, reject) => {
     let raw = '';
     req.on('data', chunk => {
@@ -73,7 +73,7 @@ function parseJson(req: http.IncomingMessage): Promise<any> {
     });
     req.on('end', () => {
       try {
-        resolve(raw ? JSON.parse(raw) : {});
+        resolve(raw ? (JSON.parse(raw) as T) : ({} as T));
       } catch {
         reject(new Error('Malformed JSON payload.'));
       }
@@ -119,9 +119,11 @@ export async function handleRagRoutes(req: http.IncomingMessage, res: http.Serve
         if (contentType.includes('multipart/form-data')) {
           // A. Multipart Form-Data Upload
           const parsed = await parseMultipartForm(req);
-          subjectId = parsed.fields.subject_id;
-          unitId = parsed.fields.unit_id || null;
-          customName = parsed.fields.name || parsed.fields.custom_name;
+          subjectId = (parsed.fields.subject_id || '').trim();
+          const rawUnit = (parsed.fields.unit_id || '').trim();
+          unitId = rawUnit && rawUnit !== 'null' && rawUnit !== 'undefined' ? rawUnit : null;
+          const rawName = (parsed.fields.name || parsed.fields.custom_name || '').trim();
+          customName = rawName && rawName !== 'null' && rawName !== 'undefined' ? rawName : undefined;
           fileName = parsed.fileName || 'uploaded_document.pdf';
           fileBuffer = parsed.fileBuffer;
         } else if (contentType.includes('application/json')) {
@@ -142,6 +144,7 @@ export async function handleRagRoutes(req: http.IncomingMessage, res: http.Serve
           unitId = parsed.data.unit_id || null;
           fileName = parsed.data.file_name;
           customName = parsed.data.custom_name;
+
 
           // Strip data URL header if included (e.g. data:application/pdf;base64,...)
           const base64Data = parsed.data.file_base64.replace(/^data:[^;]+;base64,/, '');

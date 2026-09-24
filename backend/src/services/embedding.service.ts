@@ -8,6 +8,20 @@
  * - Target output dimension: 1536 (matching PostgreSQL document_chunks.embedding vector(1536)).
  */
 
+import { env } from '../config/env.js';
+
+interface GeminiEmbedResponse {
+  embedding?: {
+    values: number[];
+  };
+}
+
+interface GeminiBatchEmbedResponse {
+  embeddings?: {
+    values: number[];
+  }[];
+}
+
 export class EmbeddingService {
   public static readonly DEFAULT_MODEL = 'gemini-embedding-001';
   public static readonly DEFAULT_DIMENSION = 1536;
@@ -16,7 +30,7 @@ export class EmbeddingService {
    * Retrieves the sanitized Gemini API key from environment variables.
    */
   public static getApiKey(): string | null {
-    const raw = process.env.GEMINI_API_KEY;
+    const raw = env.GEMINI_API_KEY || process.env.GEMINI_API_KEY;
     if (!raw) return null;
     // Strip possible quotes wrapping the key in .env
     const cleaned = raw.replace(/^['"]|['"]$/g, '').trim();
@@ -27,7 +41,7 @@ export class EmbeddingService {
    * Retrieves the configured or currently recommended Gemini embedding model.
    */
   public static getModelName(): string {
-    return process.env.GEMINI_EMBEDDING_MODEL?.trim() || this.DEFAULT_MODEL;
+    return env.GEMINI_EMBEDDING_MODEL || process.env.GEMINI_EMBEDDING_MODEL?.trim() || this.DEFAULT_MODEL;
   }
 
   /**
@@ -63,8 +77,8 @@ export class EmbeddingService {
         return this.generateDeterministicVector(cleanText, this.DEFAULT_DIMENSION);
       }
 
-      const data = (await response.json()) as any;
-      const values: number[] = data.embedding?.values;
+      const data = (await response.json()) as GeminiEmbedResponse;
+      const values = data.embedding?.values;
 
       if (!values || !Array.isArray(values) || values.length === 0) {
         return this.generateDeterministicVector(cleanText, this.DEFAULT_DIMENSION);
@@ -113,7 +127,7 @@ export class EmbeddingService {
         });
 
         if (response.ok) {
-          const data = (await response.json()) as any;
+          const data = (await response.json()) as GeminiBatchEmbedResponse;
           if (data.embeddings && Array.isArray(data.embeddings)) {
             for (const item of data.embeddings) {
               results.push(item.values || this.generateDeterministicVector('fallback', this.DEFAULT_DIMENSION));
@@ -137,6 +151,7 @@ export class EmbeddingService {
 
     return results;
   }
+
 
   /**
    * Calculates cosine similarity between two vector embeddings.

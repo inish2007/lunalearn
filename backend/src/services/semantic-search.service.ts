@@ -20,6 +20,14 @@ function table(db: any, tableName: string) {
   return db.from(tableName);
 }
 
+interface MaterialMeta {
+  id: string;
+  name: string;
+  storage_path: string;
+  file_type?: string;
+  subject_id?: string;
+}
+
 export class SemanticSearchService {
   public static readonly DEFAULT_TOP_K = 5;
   public static readonly DEFAULT_THRESHOLD = 0.3;
@@ -69,10 +77,10 @@ export class SemanticSearchService {
           .select('id, name, storage_path, file_type')
           .in('id', materialIds);
 
-        const materialMap = new Map((materials || []).map((m: any) => [m.id, m]));
+        const materialMap = new Map<string, MaterialMeta>((materials || []).map((m: any) => [m.id, m]));
 
         const results: SearchResultChunk[] = rpcMatches.map((row: any) => {
-          const mat = materialMap.get(row.material_id) || {};
+          const mat = materialMap.get(row.material_id);
           return {
             chunk_id: row.id,
             material_id: row.material_id,
@@ -82,9 +90,9 @@ export class SemanticSearchService {
             chunk_index: row.chunk_index ?? 0,
             material: {
               id: row.material_id,
-              name: (mat as any).name || (row.metadata?.material_name as string) || 'Document',
-              storage_path: (mat as any).storage_path || (row.metadata?.storage_path as string) || '',
-              file_type: (mat as any).file_type || 'PDF'
+              name: mat?.name || (row.metadata?.material_name as string) || 'Document',
+              storage_path: mat?.storage_path || (row.metadata?.storage_path as string) || '',
+              file_type: mat?.file_type || 'PDF'
             },
             metadata: row.metadata || {}
           };
@@ -99,6 +107,7 @@ export class SemanticSearchService {
     } catch {
       // Continue to fallback implementation
     }
+
 
     // 3. Robust Fallback: Scoped table query + Vector Cosine Similarity
     return this.searchWithClientFallback({
@@ -163,7 +172,7 @@ export class SemanticSearchService {
       return { query: cleanQuery, matches_count: 0, results: [] };
     }
 
-    const materialMap = new Map(materialList.map(m => [m.id, m]));
+    const materialMap = new Map<string, MaterialMeta>(materialList.map(m => [m.id, m]));
 
     // C. Calculate cosine similarity for each chunk
     const scoredChunks: SearchResultChunk[] = [];
@@ -189,7 +198,7 @@ export class SemanticSearchService {
       const similarity = EmbeddingService.cosineSimilarity(queryEmbedding, chunkVec);
 
       if (similarity >= threshold) {
-        const mat = materialMap.get(chunk.material_id) || {};
+        const mat = materialMap.get(chunk.material_id);
         scoredChunks.push({
           chunk_id: chunk.id,
           material_id: chunk.material_id,
@@ -199,14 +208,15 @@ export class SemanticSearchService {
           chunk_index: chunk.chunk_index ?? 0,
           material: {
             id: chunk.material_id,
-            name: mat.name || (chunk.metadata?.material_name as string) || 'Study Material',
-            storage_path: mat.storage_path || (chunk.metadata?.storage_path as string) || '',
-            file_type: mat.file_type || 'PDF'
+            name: mat?.name || (chunk.metadata?.material_name as string) || 'Study Material',
+            storage_path: mat?.storage_path || (chunk.metadata?.storage_path as string) || '',
+            file_type: mat?.file_type || 'PDF'
           },
           metadata: chunk.metadata || {}
         });
       }
     }
+
 
     // D. Sort by similarity score descending and take topK
     scoredChunks.sort((a, b) => b.similarity - a.similarity);

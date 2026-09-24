@@ -21,6 +21,8 @@ const envSchema = z.object({
   SUPABASE_ANON_KEY: z.string().min(10, { message: 'SUPABASE_ANON_KEY is required' }),
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(10, { message: 'SUPABASE_SERVICE_ROLE_KEY is required' }),
   DATABASE_URL: z.string().optional(),
+  GEMINI_API_KEY: z.string().optional(),
+  GEMINI_EMBEDDING_MODEL: z.string().optional(),
   PORT: z.string().regex(/^\d+$/).default('4000'),
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development')
 });
@@ -41,9 +43,12 @@ export function getEnv(): Env {
     SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY || 'placeholder-anon-key',
     SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY || 'placeholder-service-key',
     DATABASE_URL: process.env.DATABASE_URL,
+    GEMINI_API_KEY: process.env.GEMINI_API_KEY ? process.env.GEMINI_API_KEY.replace(/^['"]|['"]$/g, '').trim() : undefined,
+    GEMINI_EMBEDDING_MODEL: process.env.GEMINI_EMBEDDING_MODEL?.trim(),
     PORT: process.env.PORT || '4000',
     NODE_ENV: (process.env.NODE_ENV as Env['NODE_ENV']) || 'development'
   };
 }
 
 export const env = getEnv();
+

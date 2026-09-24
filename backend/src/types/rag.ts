@@ -94,13 +94,20 @@ export interface RagUploadResponseData {
 
 export const SemanticSearchSchema = z.object({
   query: z.string().min(1, { message: 'Search query cannot be empty' }).max(2000),
-  subject_id: z.string().uuid({ message: 'subject_id must be a valid UUID' }).optional().nullable(),
-  material_id: z.string().uuid({ message: 'material_id must be a valid UUID' }).optional().nullable(),
-  top_k: z.number().int().min(1).max(50).default(5),
-  threshold: z.number().min(0).max(1).default(0.3)
+  subject_id: z.preprocess(
+    val => (val === '' ? null : val),
+    z.string().uuid({ message: 'subject_id must be a valid UUID' }).optional().nullable()
+  ),
+  material_id: z.preprocess(
+    val => (val === '' ? null : val),
+    z.string().uuid({ message: 'material_id must be a valid UUID' }).optional().nullable()
+  ),
+  top_k: z.coerce.number().int().min(1).max(50).default(5),
+  threshold: z.coerce.number().min(0).max(1).default(0.3)
 });
 
 export type SemanticSearchInput = z.infer<typeof SemanticSearchSchema>;
+
 
 export interface SearchResultChunk {
   chunk_id: string;

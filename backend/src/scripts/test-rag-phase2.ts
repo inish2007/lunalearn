@@ -310,6 +310,22 @@ async function runRagPhase2Tests() {
   const invalidSubjectParsed = SemanticSearchSchema.safeParse(invalidSubjectSearch);
   assert(!invalidSubjectParsed.success, 'Rejects invalid subject_id UUID');
 
+  // Test string coercion for numeric parameters (from form-data or query params)
+  const coercedPayload = {
+    query: 'Explain ACID',
+    subject_id: '',
+    top_k: '3',
+    threshold: '0.25'
+  };
+  const coercedParsed = SemanticSearchSchema.safeParse(coercedPayload);
+  assert(coercedParsed.success, 'Coerces string numbers and converts empty subject_id to null');
+  if (coercedParsed.success) {
+    assert(coercedParsed.data.subject_id === null, 'Empty string subject_id converts to null');
+    assert(coercedParsed.data.top_k === 3, 'String "3" coerces to integer 3');
+    assert(coercedParsed.data.threshold === 0.25, 'String "0.25" coerces to number 0.25');
+  }
+
+
   console.log(`\n====================================================`);
   console.log(`RAG Phase 2 Verification: ${passed} passed, ${failed} failed.`);
   console.log(`====================================================\n`);

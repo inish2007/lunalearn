@@ -1,14 +1,17 @@
 import http from 'http';
 import { env } from './config/env.js';
 import { handleAuthRoutes } from './routes/auth.routes.js';
+import { handleDomainRoutes } from './routes/domain.routes.js';
 
 export * from './config/env.js';
 export * from './lib/supabase.js';
 export * from './lib/scoped-client.js';
 export * from './types/database.js';
 export * from './types/auth.js';
+export * from './types/domain.js';
 export * from './services/auth.service.js';
 export * from './middleware/auth.middleware.js';
+export * from './routes/domain.routes.js';
 
 const PORT = parseInt(env.PORT, 10);
 
@@ -49,33 +52,70 @@ export const server = http.createServer(async (req, res) => {
         url: env.SUPABASE_URL
       },
       endpoints: [
-        'GET  /health',
-        'GET  /api/status',
-        'POST /api/auth/signup',
-        'POST /api/auth/login',
-        'POST /api/auth/logout (protected)',
-        'GET  /api/auth/me (protected)'
+        'GET    /health',
+        'GET    /api/status',
+        'POST   /api/auth/signup',
+        'POST   /api/auth/login',
+        'POST   /api/auth/logout (protected)',
+        'GET    /api/auth/me (protected)',
+        'GET    /api/subjects (protected)',
+        'POST   /api/subjects (protected)',
+        'GET    /api/subjects/:id (protected)',
+        'PATCH  /api/subjects/:id (protected)',
+        'DELETE /api/subjects/:id (protected)',
+        'GET    /api/units (protected)',
+        'POST   /api/units (protected)',
+        'GET    /api/units/:id (protected)',
+        'PATCH  /api/units/:id (protected)',
+        'DELETE /api/units/:id (protected)',
+        'GET    /api/topics (protected)',
+        'POST   /api/topics (protected)',
+        'GET    /api/topics/:id (protected)',
+        'PATCH  /api/topics/:id (protected)',
+        'DELETE /api/topics/:id (protected)',
+        'GET    /api/tasks (protected)',
+        'POST   /api/tasks (protected)',
+        'GET    /api/tasks/:id (protected)',
+        'PATCH  /api/tasks/:id (protected)',
+        'DELETE /api/tasks/:id (protected)',
+        'GET    /api/exams (protected)',
+        'POST   /api/exams (protected)',
+        'GET    /api/exams/:id (protected)',
+        'PATCH  /api/exams/:id (protected)',
+        'DELETE /api/exams/:id (protected)',
+        'GET    /api/materials (protected)',
+        'POST   /api/materials (protected)',
+        'GET    /api/materials/:id (protected)',
+        'PATCH  /api/materials/:id (protected)',
+        'DELETE /api/materials/:id (protected)'
       ],
       timestamp: new Date().toISOString()
     }));
     return;
   }
 
-  // Auth Routes Dispatcher
-  const handled = await handleAuthRoutes(req, res);
-  if (handled) return;
+  // 1. Auth Routes Dispatcher
+  const authHandled = await handleAuthRoutes(req, res);
+  if (authHandled) return;
+
+  // 2. Core Domain CRUD Routes Dispatcher
+  const domainHandled = await handleDomainRoutes(req, res);
+  if (domainHandled) return;
 
   // 404 Route Not Found
   res.writeHead(404, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify({
-    error: 'Not found',
-    routes: [
-      '/health',
-      '/api/status',
-      '/api/auth/signup',
-      '/api/auth/login',
-      '/api/auth/logout',
-      '/api/auth/me'
+    success: false,
+    error: 'NotFound',
+    message: `Route ${req.method} ${url.pathname} not found`,
+    availableResources: [
+      '/api/auth',
+      '/api/subjects',
+      '/api/units',
+      '/api/topics',
+      '/api/tasks',
+      '/api/exams',
+      '/api/materials'
     ]
   }));
 });
@@ -95,10 +135,8 @@ if (process.env.NODE_ENV !== 'test') {
     console.log(`🌙 LunaLearn Backend running on http://localhost:${PORT}`);
     console.log(`   Health Check:     http://localhost:${PORT}/health`);
     console.log(`   API Status:       http://localhost:${PORT}/api/status`);
-    console.log(`   Sign Up:          POST http://localhost:${PORT}/api/auth/signup`);
-    console.log(`   Sign In:          POST http://localhost:${PORT}/api/auth/login`);
-    console.log(`   Current Student:  GET  http://localhost:${PORT}/api/auth/me`);
-    console.log(`   Sign Out:         POST http://localhost:${PORT}/api/auth/logout`);
+    console.log(`   Auth Routes:      http://localhost:${PORT}/api/auth/*`);
+    console.log(`   Domain CRUD:      http://localhost:${PORT}/api/{subjects,units,topics,tasks,exams,materials}`);
     console.log('====================================================');
   });
 }

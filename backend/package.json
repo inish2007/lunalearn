@@ -10,7 +10,8 @@
     "start": "node dist/index.js",
     "lint": "tsc --noEmit",
     "typecheck": "tsc --noEmit",
-    "test:connection": "tsx src/scripts/test-connection.ts"
+    "test:connection": "tsx src/scripts/test-connection.ts",
+    "test:auth": "tsx src/scripts/test-auth.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.4",

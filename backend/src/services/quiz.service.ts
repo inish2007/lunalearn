@@ -237,6 +237,19 @@ export class QuizService {
 
       if (!isCorrect) {
         weakTopicsSet.add(topicName);
+        const targetTopicId = ans.topic_id || topic_id;
+        try {
+          const topicTable = client.from('topics');
+          if (typeof topicTable?.update === 'function') {
+            if (targetTopicId) {
+              Promise.resolve(topicTable.update({ is_weak: true }).eq('id', targetTopicId)).catch(() => {});
+            } else if (topicName && topicName !== 'General Subject Knowledge') {
+              Promise.resolve(topicTable.update({ is_weak: true }).eq('title', topicName)).catch(() => {});
+            }
+          }
+        } catch {
+          // Ignore topic update failure on mock clients
+        }
       }
     }
 
@@ -394,7 +407,8 @@ export class QuizService {
             maxOutputTokens: 2048,
             topP: 0.95
           }
-        })
+        }),
+        signal: AbortSignal.timeout(15000)
       });
 
       if (!response.ok) {

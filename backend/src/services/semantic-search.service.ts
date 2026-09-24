@@ -179,12 +179,13 @@ export class SemanticSearchService {
 
     for (const chunk of chunks as any[]) {
       let chunkVec: number[] | null = null;
+      const rawVector = chunk.embedding ?? chunk.vector;
 
-      if (Array.isArray(chunk.embedding)) {
-        chunkVec = chunk.embedding;
-      } else if (typeof chunk.embedding === 'string') {
+      if (Array.isArray(rawVector)) {
+        chunkVec = rawVector;
+      } else if (typeof rawVector === 'string') {
         try {
-          chunkVec = JSON.parse(chunk.embedding);
+          chunkVec = JSON.parse(rawVector);
         } catch {
           chunkVec = null;
         }

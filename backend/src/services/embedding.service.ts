@@ -68,12 +68,17 @@ export class EmbeddingService {
         body: JSON.stringify({
           content: { parts: [{ text: cleanText }] },
           outputDimensionality: this.DEFAULT_DIMENSION
-        })
+        }),
+        signal: AbortSignal.timeout(10000)
       });
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.warn(`⚠️ Gemini embedContent API returned HTTP ${response.status}: ${errorText}`);
+        if (response.status === 429) {
+          console.warn(`⚠️ Gemini embedContent API rate-limited (HTTP 429). Employing fallback vector protection.`);
+        } else {
+          console.warn(`⚠️ Gemini embedContent API returned HTTP ${response.status}: ${errorText}`);
+        }
         return this.generateDeterministicVector(cleanText, this.DEFAULT_DIMENSION);
       }
 
@@ -87,7 +92,7 @@ export class EmbeddingService {
       return values;
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
-      console.warn(`⚠️ Gemini API network error (${msg}). Using fallback vector.`);
+      console.warn(`⚠️ Gemini API request error (${msg}). Using fallback vector.`);
       return this.generateDeterministicVector(cleanText, this.DEFAULT_DIMENSION);
     }
   }
@@ -123,7 +128,8 @@ export class EmbeddingService {
         const response = await fetch(batchUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ requests })
+          body: JSON.stringify({ requests }),
+          signal: AbortSignal.timeout(15000)
         });
 
         if (response.ok) {

@@ -278,7 +278,8 @@ export class StudyAssistantService {
             maxOutputTokens: 1024,
             topP: 0.95
           }
-        })
+        }),
+        signal: AbortSignal.timeout(15000)
       });
 
       if (!response.ok) {
@@ -328,14 +329,6 @@ export class StudyAssistantService {
       const topSource = sources[0];
       const sourceCitation = `[${topSource.material_name}${topSource.page_number ? `, Page ${topSource.page_number}` : ''}]`;
 
-      if (lower.includes('explain') || lower.includes('what is') || lower.includes('how')) {
-        return (
-          `Based on your course materials in ${sourceCitation}:\n\n` +
-          `${topSource.preview}\n\n` +
-          `Key Takeaway: This concept is essential for ${activeSubjectName || 'your course'}. Let me know if you would like me to break down an example or test your understanding with a practice question!`
-        );
-      }
-
       if (lower.includes('summar') || lower.includes('notes')) {
         return (
           `Here is a concise summary of your uploaded notes from ${sourceCitation}:\n\n` +
@@ -351,6 +344,12 @@ export class StudyAssistantService {
           `Take a moment to formulate your answer, then send it to me and I will evaluate it!`
         );
       }
+
+      return (
+        `Based on your course materials in ${sourceCitation}:\n\n` +
+        `${topSource.preview}\n\n` +
+        `Key Takeaway: This concept is essential for ${activeSubjectName || 'your course'}. Let me know if you would like me to break down an example or test your understanding with a practice question!`
+      );
     }
 
     if (lower.includes('next') || lower.includes('study') || lower.includes('recommend')) {

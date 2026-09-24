@@ -11,11 +11,14 @@
     "lint": "tsc --noEmit",
     "typecheck": "tsc --noEmit",
     "test:connection": "tsx src/scripts/test-connection.ts",
+    "seed": "tsx src/scripts/seed-demo.ts",
+    "seed:demo": "tsx src/scripts/seed-demo.ts",
     "test:auth": "tsx src/scripts/test-auth.ts",
     "test:crud": "tsx src/scripts/test-crud.ts",
     "test:engine": "tsx src/scripts/test-engine.ts",
     "test:planner": "tsx src/scripts/test-planner.ts",
-    "test": "tsx src/scripts/test-auth.ts && tsx src/scripts/test-crud.ts && tsx src/scripts/test-engine.ts && tsx src/scripts/test-planner.ts"
+    "test:e2e": "tsx src/scripts/test-e2e-loop.ts",
+    "test": "tsx src/scripts/test-auth.ts && tsx src/scripts/test-crud.ts && tsx src/scripts/test-engine.ts && tsx src/scripts/test-planner.ts && tsx src/scripts/test-e2e-loop.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.4",

@@ -6,6 +6,7 @@ import { handleAcademicRoutes } from './routes/academic.routes.js';
 import { handlePlannerRoutes } from './routes/planner.routes.js';
 import { handleRagRoutes } from './routes/rag.routes.js';
 import { handleAssistantRoutes } from './routes/assistant.routes.js';
+import { handleQuizRoutes } from './routes/quiz.routes.js';
 
 export * from './config/env.js';
 export * from './lib/supabase.js';
@@ -15,6 +16,7 @@ export * from './types/auth.js';
 export * from './types/domain.js';
 export * from './types/rag.js';
 export * from './types/assistant.js';
+export * from './types/quiz.js';
 export * from './services/auth.service.js';
 export * from './services/academic-engine.service.js';
 export * from './services/planner-context.service.js';
@@ -25,12 +27,14 @@ export * from './services/rag-material.service.js';
 export * from './services/embedding.service.js';
 export * from './services/semantic-search.service.js';
 export * from './services/study-assistant.service.js';
+export * from './services/quiz.service.js';
 export * from './middleware/auth.middleware.js';
 export * from './routes/domain.routes.js';
 export * from './routes/academic.routes.js';
 export * from './routes/planner.routes.js';
 export * from './routes/rag.routes.js';
 export * from './routes/assistant.routes.js';
+export * from './routes/quiz.routes.js';
 
 
 const PORT = parseInt(env.PORT, 10);
@@ -116,7 +120,9 @@ export const server = http.createServer(async (req, res) => {
         'GET    /api/planner/context/:subjectId (protected)',
         'POST   /api/rag/upload (protected)',
         'POST   /api/rag/search (protected)',
-        'POST   /api/assistant/chat (protected)'
+        'POST   /api/assistant/chat (protected)',
+        'POST   /api/quiz/generate (protected)',
+        'POST   /api/quiz/submit (protected)'
       ],
       timestamp: new Date().toISOString()
     }));
@@ -147,6 +153,10 @@ export const server = http.createServer(async (req, res) => {
   const assistantHandled = await handleAssistantRoutes(req, res);
   if (assistantHandled) return;
 
+  // 7. Quiz Generation & Scoring Dispatcher (Phase 4)
+  const quizHandled = await handleQuizRoutes(req, res);
+  if (quizHandled) return;
+
   // 404 Route Not Found
   res.writeHead(404, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify({
@@ -166,7 +176,9 @@ export const server = http.createServer(async (req, res) => {
       '/api/planner/context',
       '/api/rag/upload',
       '/api/rag/search',
-      '/api/assistant/chat'
+      '/api/assistant/chat',
+      '/api/quiz/generate',
+      '/api/quiz/submit'
     ]
   }));
 

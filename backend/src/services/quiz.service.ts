@@ -1,0 +1,727 @@
+import crypto from 'crypto';
+import { SupabaseClient } from '@supabase/supabase-js';
+import { Database } from '../types/database.js';
+import { env } from '../config/env.js';
+import { EmbeddingService } from './embedding.service.js';
+import { SemanticSearchService } from './semantic-search.service.js';
+import { AcademicEngineService } from './academic-engine.service.js';
+import {
+  GenerateQuizInput,
+  GenerateQuizResponseData,
+  QuizQuestion,
+  SubmitQuizInput,
+  SubmitQuizResponseData,
+  QuizQuestionEvaluation
+} from '../types/quiz.js';
+
+interface GeminiGenerateResponse {
+  candidates?: {
+    content?: {
+      parts?: {
+        text?: string;
+      }[];
+    };
+    finishReason?: string;
+  }[];
+  error?: {
+    code: number;
+    message: string;
+    status: string;
+  };
+}
+
+export class QuizService {
+  public static readonly DEFAULT_MODEL = 'gemini-3.8-flash';
+  public static readonly FALLBACK_MODEL = 'gemini-flash-latest';
+
+  public static getModelName(): string {
+    return env.GEMINI_CHAT_MODEL || process.env.GEMINI_CHAT_MODEL?.trim() || this.DEFAULT_MODEL;
+  }
+
+  /**
+   * Generates a 5-question quiz for a subject, optionally focused on a topic or material.
+   * Grounded in retrieved document chunks when material exists, or in topic/syllabus name alone when it doesn't.
+   */
+  public static async generateQuiz(
+    db: SupabaseClient<Database>,
+    profileId: string,
+    input: GenerateQuizInput
+  ): Promise<GenerateQuizResponseData> {
+    const { subject_id, topic_id, material_id, question_type = 'multiple_choice', num_questions = 5 } = input;
+
+    const client = db as any;
+
+    // 1. Verify subject exists for student
+    const { data: subject, error: subjErr } = await client
+      .from('subjects')
+      .select('id, name, code')
+      .eq('id', subject_id)
+      .maybeSingle();
+
+    if (subjErr || !subject) {
+      throw new Error(`Subject with ID ${subject_id} not found.`);
+    }
+
+    // 2. Resolve topic details if provided
+    let activeTopic: { id: string; title: string; is_weak?: boolean } | null = null;
+    if (topic_id) {
+      const { data: topic } = await client
+        .from('topics')
+        .select('id, title, is_weak')
+        .eq('id', topic_id)
+        .maybeSingle();
+
+      if (topic) {
+        activeTopic = topic;
+      }
+    }
+
+    // If no topic specified, check if there are weak topics under the subject to focus on
+    if (!activeTopic) {
+      // Find units under this subject
+      const { data: units } = await client
+        .from('units')
+        .select('id')
+        .eq('subject_id', subject_id);
+
+      if (units && units.length > 0) {
+        const unitIds = units.map((u: any) => u.id);
+        const { data: topics } = await client
+          .from('topics')
+          .select('id, title, is_weak')
+          .in('unit_id', unitIds);
+
+        if (topics && topics.length > 0) {
+          // Prioritize weak topics if any
+          const weak = topics.find((t: any) => t.is_weak);
+          activeTopic = weak || topics[0];
+        }
+      }
+    }
+
+    const topicTitle = activeTopic?.title || 'General Curriculum';
+
+    // 3. Grounding: Retrieve relevant chunks if materials or chunks exist
+    let retrievedChunks: Array<{
+      material_id: string;
+      material_name: string;
+      storage_path?: string;
+      page_number: number | null;
+      preview: string;
+      similarity: number;
+    }> = [];
+
+    const searchQuery = activeTopic ? `${activeTopic.title}` : `${subject.name}`;
+
+    try {
+      const searchRes = await SemanticSearchService.search({
+        db,
+        profileId,
+        query: searchQuery,
+        subjectId: subject_id,
+        materialId: material_id ?? null,
+        topK: 5,
+        threshold: 0.15
+      });
+
+      if (searchRes.results && searchRes.results.length > 0) {
+        retrievedChunks = searchRes.results.map(r => ({
+          material_id: r.material_id,
+          material_name: r.material.name,
+          storage_path: r.material.storage_path,
+          page_number: r.page_number,
+          preview: r.content.length > 250 ? `${r.content.substring(0, 250)}...` : r.content,
+          similarity: r.similarity
+        }));
+      }
+    } catch (searchErr) {
+      console.warn('⚠️ Grounding vector search warning in quiz generation:', searchErr);
+    }
+
+    const isGroundedInChunks = retrievedChunks.length > 0;
+    const model = this.getModelName();
+
+    // 4. Generate questions via Gemini (or offline fallback)
+    const questions = await this.generateQuestionsWithGemini({
+      subjectName: subject.name,
+      subjectCode: subject.code,
+      topicId: activeTopic?.id ?? null,
+      topicTitle,
+      questionType: question_type,
+      numQuestions: num_questions,
+      chunks: retrievedChunks,
+      model
+    });
+
+    const sourceMaterials = Array.from(
+      new Map(
+        retrievedChunks.map(c => [
+          c.material_id,
+          { material_id: c.material_id, material_name: c.material_name, page_number: c.page_number }
+        ])
+      ).values()
+    );
+
+    return {
+      quiz_id: crypto.randomUUID ? crypto.randomUUID() : `quiz-${Date.now()}`,
+      subject_id: subject.id,
+      subject_name: subject.name,
+      topic_id: activeTopic?.id ?? null,
+      topic_title: topicTitle,
+      grounded: isGroundedInChunks,
+      grounding_type: isGroundedInChunks ? 'retrieved_chunks' : 'topic_syllabus',
+      source_materials: sourceMaterials,
+      questions,
+      model
+    };
+  }
+
+  /**
+   * Scores a quiz attempt, detects which topics the student got wrong,
+   * writes the result to the existing quiz_results table using the scoped client,
+   * and returns the scored breakdown with updated academic readiness.
+   */
+  public static async scoreAndSubmitQuiz(
+    db: SupabaseClient<Database>,
+    profileId: string,
+    input: SubmitQuizInput
+  ): Promise<SubmitQuizResponseData> {
+    const client = db as any;
+    const { subject_id, topic_id, answers } = input;
+
+    // 1. Verify subject exists
+    const { data: subject, error: subjErr } = await client
+      .from('subjects')
+      .select('id, name')
+      .eq('id', subject_id)
+      .maybeSingle();
+
+    if (subjErr || !subject) {
+      throw new Error(`Subject with ID ${subject_id} not found.`);
+    }
+
+    // 2. Fetch topic mapping for topic titles if needed
+    let fallbackTopicTitle = 'General Subject Knowledge';
+    if (topic_id) {
+      const { data: top } = await client
+        .from('topics')
+        .select('title')
+        .eq('id', topic_id)
+        .maybeSingle();
+      if (top?.title) {
+        fallbackTopicTitle = top.title;
+      }
+    }
+
+    const evaluations: QuizQuestionEvaluation[] = [];
+    const weakTopicsSet = new Set<string>();
+
+    // 3. Evaluate each answer
+    for (const ans of answers) {
+      const rawUserAns = (ans.user_answer ?? ans.selected_answer ?? '').trim();
+      const rawCorrectAns = ans.correct_answer.trim();
+      const topicName = ans.topic_title?.trim() || fallbackTopicTitle;
+
+      const isCorrect = this.isAnswerCorrect(rawUserAns, rawCorrectAns);
+
+      evaluations.push({
+        question_id: ans.question_id,
+        question: ans.question,
+        user_answer: rawUserAns,
+        correct_answer: rawCorrectAns,
+        is_correct: isCorrect,
+        explanation: ans.explanation,
+        topic_id: ans.topic_id ?? topic_id ?? null,
+        topic_title: topicName
+      });
+
+      if (!isCorrect) {
+        weakTopicsSet.add(topicName);
+      }
+    }
+
+    const totalQuestions = answers.length;
+    const correctAnswers = evaluations.filter(e => e.is_correct).length;
+    const score = totalQuestions > 0 ? Math.round((correctAnswers / totalQuestions) * 100) : 0;
+    const passed = score >= 60;
+    const weakTopicsIdentified = Array.from(weakTopicsSet);
+
+    // 4. Write correctly-shaped row to existing quiz_results table using scoped client
+    const insertPayload = {
+      profile_id: profileId,
+      subject_id: subject_id,
+      topic_id: topic_id ?? null,
+      score: score,
+      total_questions: totalQuestions,
+      correct_answers: correctAnswers,
+      weak_topics_identified: weakTopicsIdentified,
+      created_at: new Date().toISOString()
+    };
+
+    const { data: insertedRow, error: insertErr } = await client
+      .from('quiz_results')
+      .insert(insertPayload)
+      .select('*')
+      .maybeSingle();
+
+    if (insertErr) {
+      console.warn('⚠️ Could not insert quiz_results record:', insertErr.message);
+    }
+
+    const quizResultId =
+      insertedRow?.id ||
+      (crypto.randomUUID ? crypto.randomUUID() : `qr-${Date.now()}`);
+
+    // 5. Fetch updated readiness score and active risks from AcademicEngineService
+    let updatedReadiness: SubmitQuizResponseData['updated_readiness'];
+    try {
+      const readiness = await AcademicEngineService.getSubjectReadiness(db, subject_id);
+      updatedReadiness = {
+        readiness_percentage: readiness.readiness_percentage,
+        breakdown: readiness.breakdown,
+        active_risks_count: readiness.risks.length
+      };
+    } catch (readinessErr) {
+      console.warn('⚠️ Could not compute updated readiness score:', readinessErr);
+    }
+
+    return {
+      quiz_result_id: quizResultId,
+      subject_id: subject_id,
+      topic_id: topic_id ?? null,
+      score: score,
+      total_questions: totalQuestions,
+      correct_answers: correctAnswers,
+      passed: passed,
+      weak_topics_identified: weakTopicsIdentified,
+      question_evaluations: evaluations,
+      updated_readiness: updatedReadiness,
+      created_at: insertPayload.created_at
+    };
+  }
+
+  /**
+   * Normalizes answers and evaluates correctness.
+   * Handles multiple choice option indicators (e.g. "A", "A) Superkey", "Superkey")
+   * and short answer phrase normalization.
+   */
+  public static isAnswerCorrect(userAns: string, correctAns: string): boolean {
+    const cleanUser = userAns.trim();
+    const cleanCorrect = correctAns.trim();
+
+    if (!cleanUser || !cleanCorrect) return false;
+
+    // Exact case-insensitive match
+    if (cleanUser.toLowerCase() === cleanCorrect.toLowerCase()) {
+      return true;
+    }
+
+    // Strip leading option markers like "A)", "B.", "(C)", "D - "
+    const stripOptionPrefix = (str: string) =>
+      str.replace(/^\(?([a-dA-D])\)?[.:\-]?\s*/, '').trim().toLowerCase();
+
+    const strippedUser = stripOptionPrefix(cleanUser);
+    const strippedCorrect = stripOptionPrefix(cleanCorrect);
+
+    if (strippedUser === strippedCorrect && strippedUser.length > 0) {
+      return true;
+    }
+
+    // Check if user provided only the letter (e.g. "A" or "B") while correct answer has "A) Option text"
+    const userLetterMatch = cleanUser.match(/^([a-dA-D])$/);
+    const correctLetterMatch = cleanCorrect.match(/^\(?([a-dA-D])\)?[.:\-]?\s*/);
+    if (userLetterMatch && correctLetterMatch) {
+      if (userLetterMatch[1].toUpperCase() === correctLetterMatch[1].toUpperCase()) {
+        return true;
+      }
+    }
+
+    // Fuzzy punctuation and space stripping
+    const normalizeString = (str: string) =>
+      str.toLowerCase().replace(/[^a-z0-9]/g, ' ').replace(/\s+/g, ' ').trim();
+
+    const normUser = normalizeString(strippedUser);
+    const normCorrect = normalizeString(strippedCorrect);
+
+    if (normUser === normCorrect && normUser.length > 0) {
+      return true;
+    }
+
+    // Short answer containment match (if correct answer keyword is contained in user response)
+    if (normCorrect.length > 4 && normUser.includes(normCorrect)) {
+      return true;
+    }
+
+    return false;
+  }
+
+  /**
+   * Prompts Gemini API to generate 5 high-yield questions adhering to strict JSON format.
+   */
+  private static async generateQuestionsWithGemini(opts: {
+    subjectName: string;
+    subjectCode: string;
+    topicId: string | null;
+    topicTitle: string;
+    questionType: 'multiple_choice' | 'short_answer' | 'mixed';
+    numQuestions: number;
+    chunks: Array<{
+      material_id: string;
+      material_name: string;
+      page_number: number | null;
+      preview: string;
+    }>;
+    model: string;
+  }): Promise<QuizQuestion[]> {
+    const apiKey = EmbeddingService.getApiKey();
+
+    if (!apiKey) {
+      return this.generateOfflineQuestions(opts);
+    }
+
+    const isGrounded = opts.chunks.length > 0;
+    const prompt = this.buildQuizPrompt(opts, isGrounded);
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${opts.model}:generateContent?key=${apiKey}`;
+
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ role: 'user', parts: [{ text: prompt }] }],
+          generationConfig: {
+            temperature: 0.2,
+            maxOutputTokens: 2048,
+            topP: 0.95
+          }
+        })
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.warn(`⚠️ Gemini API returned HTTP ${response.status}: ${errorText}`);
+
+        // Try fallback model if 404, 429, or 503
+        if ((response.status === 404 || response.status === 503 || response.status === 429) && opts.model !== this.FALLBACK_MODEL) {
+          console.log(`⚠️ Retrying quiz generation with fallback model ${this.FALLBACK_MODEL}...`);
+          return this.generateQuestionsWithGemini({
+            ...opts,
+            model: this.FALLBACK_MODEL
+          });
+        }
+
+        return this.generateOfflineQuestions(opts);
+      }
+
+      const data = (await response.json()) as GeminiGenerateResponse;
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+
+      if (!text || text.trim() === '') {
+        return this.generateOfflineQuestions(opts);
+      }
+
+      const parsedQuestions = this.parseGeminiQuizJson(text, opts);
+      if (parsedQuestions.length > 0) {
+        return parsedQuestions.slice(0, opts.numQuestions);
+      }
+
+      return this.generateOfflineQuestions(opts);
+    } catch (err) {
+      console.warn('⚠️ Network or parsing error during Gemini quiz generation:', err);
+      return this.generateOfflineQuestions(opts);
+    }
+  }
+
+  /**
+   * Constructs the strict system & user prompt for Gemini.
+   */
+  private static buildQuizPrompt(
+    opts: {
+      subjectName: string;
+      subjectCode: string;
+      topicTitle: string;
+      questionType: 'multiple_choice' | 'short_answer' | 'mixed';
+      numQuestions: number;
+      chunks: Array<{
+        material_id: string;
+        material_name: string;
+        page_number: number | null;
+        preview: string;
+      }>;
+    },
+    isGrounded: boolean
+  ): string {
+    let p = `You are an expert university exam writer and academic assessment specialist for LunaLearn.\n`;
+    p += `Generate exactly ${opts.numQuestions} academic questions for:\n`;
+    p += `- Subject: ${opts.subjectName} (${opts.subjectCode})\n`;
+    p += `- Topic: ${opts.topicTitle}\n`;
+    p += `- Question Format: ${opts.questionType} (Options: multiple_choice, short_answer, or mixed)\n\n`;
+
+    if (isGrounded) {
+      p += `GROUNDING INSTRUCTIONS:\n`;
+      p += `Base your questions directly on the following retrieved lecture notes/textbook excerpts. Ensure questions test genuine comprehension and application of the concepts mentioned in these notes:\n\n`;
+      opts.chunks.forEach((chunk, i) => {
+        p += `[Source ${i + 1}] Document: "${chunk.material_name}" (Page ${chunk.page_number ?? 'N/A'})\n`;
+        p += `Content: "${chunk.preview}"\n\n`;
+      });
+    } else {
+      p += `GROUNDING INSTRUCTIONS:\n`;
+      p += `No specific course notes were uploaded for this topic. Base your questions directly on the academic topic "${opts.topicTitle}" according to standard undergraduate curriculum standards for ${opts.subjectName}.\n\n`;
+    }
+
+    p += `FORMAT REQUIREMENTS:\n`;
+    p += `Return ONLY valid JSON matching this exact structure with no extra text or markdown formatting outside the JSON:\n`;
+    p += `{\n`;
+    p += `  "questions": [\n`;
+    p += `    {\n`;
+    p += `      "id": "q-1",\n`;
+    p += `      "question": "Question text here...",\n`;
+    p += `      "type": "multiple_choice",\n`;
+    p += `      "options": [\n`;
+    p += `        "A) Option 1",\n`;
+    p += `        "B) Option 2",\n`;
+    p += `        "C) Option 3",\n`;
+    p += `        "D) Option 4"\n`;
+    p += `      ],\n`;
+    p += `      "correct_answer": "A) Option 1",\n`;
+    p += `      "explanation": "Clear pedagogical explanation of why this answer is correct.",\n`;
+    p += `      "topic_title": "${opts.topicTitle}"\n`;
+    p += `    }\n`;
+    p += `  ]\n`;
+    p += `}\n`;
+
+    return p;
+  }
+
+  /**
+   * Safely extracts and validates JSON from Gemini response.
+   */
+  private static parseGeminiQuizJson(
+    rawText: string,
+    opts: {
+      topicId: string | null;
+      topicTitle: string;
+      chunks: Array<{
+        material_id: string;
+        material_name: string;
+        page_number: number | null;
+      }>;
+    }
+  ): QuizQuestion[] {
+    try {
+      // Strip markdown code fences if Gemini included them
+      let cleaned = rawText.trim();
+      if (cleaned.startsWith('```json')) {
+        cleaned = cleaned.replace(/^```json/, '').replace(/```$/, '').trim();
+      } else if (cleaned.startsWith('```')) {
+        cleaned = cleaned.replace(/^```/, '').replace(/```$/, '').trim();
+      }
+
+      const parsed = JSON.parse(cleaned);
+      const rawList = Array.isArray(parsed) ? parsed : parsed.questions;
+
+      if (!Array.isArray(rawList)) {
+        return [];
+      }
+
+      return rawList.map((item: any, idx: number) => {
+        const primaryChunk = opts.chunks[idx % opts.chunks.length];
+        return {
+          id: item.id || `q-${idx + 1}`,
+          question: String(item.question || `Question ${idx + 1}`),
+          type: item.type === 'short_answer' ? 'short_answer' : 'multiple_choice',
+          options: Array.isArray(item.options) ? item.options.map(String) : undefined,
+          correct_answer: String(item.correct_answer || item.answer || ''),
+          explanation: String(item.explanation || 'Verified correct answer.'),
+          topic_id: opts.topicId,
+          topic_title: String(item.topic_title || opts.topicTitle),
+          source: primaryChunk
+            ? {
+                material_id: primaryChunk.material_id,
+                material_name: primaryChunk.material_name,
+                page_number: primaryChunk.page_number
+              }
+            : null
+        };
+      });
+    } catch (e) {
+      console.warn('⚠️ Could not parse JSON from Gemini quiz output:', e);
+      return [];
+    }
+  }
+
+  /**
+   * Deterministic offline question generator for testing and offline environments.
+   * Produces 5 relevant questions grounded in topic name or syllabus.
+   */
+  public static generateOfflineQuestions(opts: {
+    subjectName: string;
+    topicId: string | null;
+    topicTitle: string;
+    questionType: 'multiple_choice' | 'short_answer' | 'mixed';
+    numQuestions: number;
+    chunks?: Array<{
+      material_id: string;
+      material_name: string;
+      page_number: number | null;
+      preview: string;
+    }>;
+  }): QuizQuestion[] {
+    const { topicTitle, questionType, numQuestions = 5, chunks = [] } = opts;
+    const lowerTopic = topicTitle.toLowerCase();
+    const primaryChunk = chunks[0];
+
+    const sourceObj = primaryChunk
+      ? {
+          material_id: primaryChunk.material_id,
+          material_name: primaryChunk.material_name,
+          page_number: primaryChunk.page_number
+        }
+      : null;
+
+    // Database / Normalization questions bank
+    if (lowerTopic.includes('normal') || lowerTopic.includes('bcnf') || lowerTopic.includes('dbms')) {
+      const isShort = (idx: number) =>
+        questionType === 'short_answer' || (questionType === 'mixed' && idx >= 3);
+
+      const qBank: QuizQuestion[] = [
+        {
+          id: 'q-1',
+          question: `What is the fundamental requirement for a relational schema to be in Boyce-Codd Normal Form (BCNF)?`,
+          type: isShort(0) ? 'short_answer' : 'multiple_choice',
+          options: isShort(0)
+            ? undefined
+            : [
+                'A) For every non-trivial functional dependency X -> Y, X must be a superkey',
+                'B) Every non-prime attribute must be transitively dependent on candidate keys',
+                'C) The table must only satisfy 1NF and have atomic values',
+                'D) Multivalued dependencies are completely eliminated'
+              ],
+          correct_answer: isShort(0)
+            ? 'For every non-trivial functional dependency X -> Y, X must be a superkey'
+            : 'A) For every non-trivial functional dependency X -> Y, X must be a superkey',
+          explanation:
+            'BCNF is a stricter version of 3NF where every determinant (left side of non-trivial FD) must be a candidate key / superkey.',
+          topic_id: opts.topicId,
+          topic_title: topicTitle,
+          source: sourceObj
+        },
+        {
+          id: 'q-2',
+          question: `Which normal form specifically addresses and removes transitive functional dependencies?`,
+          type: isShort(1) ? 'short_answer' : 'multiple_choice',
+          options: isShort(1)
+            ? undefined
+            : [
+                'A) First Normal Form (1NF)',
+                'B) Second Normal Form (2NF)',
+                'C) Third Normal Form (3NF)',
+                'D) Fourth Normal Form (4NF)'
+              ],
+          correct_answer: isShort(1) ? 'Third Normal Form (3NF)' : 'C) Third Normal Form (3NF)',
+          explanation:
+            '3NF removes transitive dependencies (X -> Y and Y -> Z where Z is a non-prime attribute and Y is not a candidate key).',
+          topic_id: opts.topicId,
+          topic_title: topicTitle,
+          source: sourceObj
+        },
+        {
+          id: 'q-3',
+          question: `When decomposing a relation into BCNF, what property cannot always be preserved?`,
+          type: isShort(2) ? 'short_answer' : 'multiple_choice',
+          options: isShort(2)
+            ? undefined
+            : [
+                'A) Lossless join decomposition',
+                'B) Dependency preservation',
+                'C) Redundancy reduction',
+                'D) Primary key generation'
+              ],
+          correct_answer: isShort(2) ? 'Dependency preservation' : 'B) Dependency preservation',
+          explanation:
+            'While 3NF guarantees both lossless join and dependency preservation, BCNF decomposition guarantees lossless join but may sacrifice dependency preservation.',
+          topic_id: opts.topicId,
+          topic_title: topicTitle,
+          source: sourceObj
+        },
+        {
+          id: 'q-4',
+          question: `What type of functional dependency exists if attribute Y depends on only a subset of a composite candidate key X?`,
+          type: isShort(3) ? 'short_answer' : 'multiple_choice',
+          options: isShort(3)
+            ? undefined
+            : [
+                'A) Partial dependency',
+                'B) Transitive dependency',
+                'C) Trivial dependency',
+                'D) Multivalued dependency'
+              ],
+          correct_answer: isShort(3) ? 'Partial dependency' : 'A) Partial dependency',
+          explanation:
+            'A partial dependency occurs when a non-prime attribute is functionally dependent on part of a composite primary key, which violates 2NF.',
+          topic_id: opts.topicId,
+          topic_title: topicTitle,
+          source: sourceObj
+        },
+        {
+          id: 'q-5',
+          question: `State the condition under which a functional dependency X -> Y is deemed trivial.`,
+          type: isShort(4) ? 'short_answer' : 'multiple_choice',
+          options: isShort(4)
+            ? undefined
+            : [
+                'A) Y is a subset of X',
+                'B) X is a subset of Y',
+                'C) Both X and Y are empty sets',
+                'D) X and Y have disjoint attributes'
+              ],
+          correct_answer: isShort(4) ? 'Y is a subset of X' : 'A) Y is a subset of X',
+          explanation: 'A functional dependency X -> Y is trivial if and only if Y is a subset of X.',
+          topic_id: opts.topicId,
+          topic_title: topicTitle,
+          source: sourceObj
+        }
+      ];
+      return qBank.slice(0, numQuestions);
+    }
+
+    // Generic high-yield questions template for any subject/topic
+    const questions: QuizQuestion[] = [];
+    for (let i = 1; i <= numQuestions; i++) {
+      const isShortAnswer =
+        questionType === 'short_answer' || (questionType === 'mixed' && i > 3);
+
+      if (isShortAnswer) {
+        questions.push({
+          id: `q-${i}`,
+          question: `Explain the core purpose and practical application of ${topicTitle} in ${opts.subjectName}.`,
+          type: 'short_answer',
+          correct_answer: `${topicTitle} core principle and application`,
+          explanation: `Tests fundamental conceptual understanding and recall of ${topicTitle}.`,
+          topic_id: opts.topicId,
+          topic_title: topicTitle,
+          source: sourceObj
+        });
+      } else {
+        questions.push({
+          id: `q-${i}`,
+          question: `Which of the following best defines the primary objective of ${topicTitle} (Question ${i})?`,
+          type: 'multiple_choice',
+          options: [
+            `A) The primary foundational definition and rule of ${topicTitle}`,
+            `B) Secondary unrelated operational procedure`,
+            `C) Legacy deprecated methodology`,
+            `D) None of the above`
+          ],
+          correct_answer: `A) The primary foundational definition and rule of ${topicTitle}`,
+          explanation: `Identifies key theoretical and structural principles of ${topicTitle}.`,
+          topic_id: opts.topicId,
+          topic_title: topicTitle,
+          source: sourceObj
+        });
+      }
+    }
+
+    return questions;
+  }
+}

@@ -20,7 +20,8 @@
     "test:rag": "tsx src/scripts/test-rag-phase1.ts",
     "test:rag2": "tsx src/scripts/test-rag-phase2.ts",
     "test:assistant": "tsx src/scripts/test-assistant-phase3.ts",
-    "test": "tsx src/scripts/test-auth.ts && tsx src/scripts/test-crud.ts && tsx src/scripts/test-engine.ts && tsx src/scripts/test-planner.ts && tsx src/scripts/test-e2e-loop.ts && tsx src/scripts/test-rag-phase1.ts && tsx src/scripts/test-rag-phase2.ts && tsx src/scripts/test-assistant-phase3.ts"
+    "test:quiz": "tsx src/scripts/test-quiz-phase4.ts",
+    "test": "tsx src/scripts/test-auth.ts && tsx src/scripts/test-crud.ts && tsx src/scripts/test-engine.ts && tsx src/scripts/test-planner.ts && tsx src/scripts/test-e2e-loop.ts && tsx src/scripts/test-rag-phase1.ts && tsx src/scripts/test-rag-phase2.ts && tsx src/scripts/test-assistant-phase3.ts && tsx src/scripts/test-quiz-phase4.ts"
   },
 
   "dependencies": {

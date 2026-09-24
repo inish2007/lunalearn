@@ -1210,6 +1210,306 @@ Returned when a brand-new student account asks questions before configuring any 
 - **405 Method Not Allowed** (`MethodNotAllowed`): Sent `GET` instead of `POST`.
 - **500 Internal Server Error** (`AssistantError`): Upstream server or unrecoverable AI assistant failure.
 
+---
+
+## 14. AI/RAG Track — Quiz Generation & Scoring (`/api/quiz/*`)
+
+> **Track Owner**: P3 (AI & RAG Track).  
+> **Status**: Phase 4 Active.  
+> **Core Pipeline**:
+> 1. **Grounded Generation**: Given a subject and optional topic or material, generates 5 questions with Gemini (`gemini-3.8-flash`) grounded in retrieved chunks when material exists, or in the topic name/syllabus alone when it doesn't.
+> 2. **Submission & Scoring**: Evaluates student answers, detects which topics the student got wrong (`weak_topics_identified`), and writes the result directly to the existing `quiz_results` table using the scoped client.
+> 3. **Automatic Readiness Integration**: Person 2's academic readiness formula (`calculateQuizPerformance` and `PERFORMANCE_RISK`) automatically picks up the new score on the very next read without modifying any calculation logic.
+
+---
+
+### 14.1 Generate Quiz
+- **Method**: `POST`
+- **Path**: `/api/quiz/generate`  
+  *(Alias: `/api/rag/quiz/generate`)*
+- **Auth**: Protected (`Authorization: Bearer <access_token>`)
+- **Headers**:
+  ```http
+  Authorization: Bearer <access_token>
+  Content-Type: application/json
+  ```
+
+#### Request Body (`application/json`)
+| Field | Type | Required | Default | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `subject_id` | UUID | **Yes** | — | Target subject identifier |
+| `topic_id` | UUID | No | `null` | Optional focus topic. If omitted, prioritizes weak or in-progress topics |
+| `material_id` | UUID | No | `null` | Optional specific lecture note or textbook document |
+| `question_type` | String | No | `"multiple_choice"` | Format: `"multiple_choice"`, `"short_answer"`, or `"mixed"` |
+| `num_questions` | Integer | No | `5` | Number of questions to generate (1 to 10) |
+
+##### Example Request A: Grounded in Uploaded Lecture Notes
+```json
+{
+  "subject_id": "c1f6d3a8-4b2e-4a9f-8e2b-1a2c3d4e5f6a",
+  "topic_id": "a9103e22-8d4b-4f91-a1b2-c3d4e5f6a7b8",
+  "question_type": "multiple_choice",
+  "num_questions": 5
+}
+```
+
+##### Example Request B: Mixed Questions Grounded in Topic Name Alone
+```json
+{
+  "subject_id": "c1f6d3a8-4b2e-4a9f-8e2b-1a2c3d4e5f6a",
+  "question_type": "mixed",
+  "num_questions": 5
+}
+```
+
+#### Success Response A: Grounded in Retrieved Chunks (200 OK)
+```json
+{
+  "success": true,
+  "data": {
+    "quiz_id": "3f4e5a6b-7c8d-9e0f-1a2b-3c4d5e6f7a8b",
+    "subject_id": "c1f6d3a8-4b2e-4a9f-8e2b-1a2c3d4e5f6a",
+    "subject_name": "Database Management Systems",
+    "topic_id": "a9103e22-8d4b-4f91-a1b2-c3d4e5f6a7b8",
+    "topic_title": "Boyce-Codd Normal Form",
+    "grounded": true,
+    "grounding_type": "retrieved_chunks",
+    "source_materials": [
+      {
+        "material_id": "mat-3f89a1-uuid",
+        "material_name": "Unit 3 Normalization Notes",
+        "page_number": 4
+      }
+    ],
+    "questions": [
+      {
+        "id": "q-1",
+        "question": "What is the primary condition for a relation to be in Boyce-Codd Normal Form (BCNF)?",
+        "type": "multiple_choice",
+        "options": [
+          "A) For every non-trivial functional dependency X -> Y, X must be a superkey",
+          "B) Every non-prime attribute must be transitively dependent on candidate keys",
+          "C) The table must only satisfy 1NF and have atomic values",
+          "D) Multivalued dependencies are completely eliminated"
+        ],
+        "correct_answer": "A) For every non-trivial functional dependency X -> Y, X must be a superkey",
+        "explanation": "BCNF requires that for every non-trivial functional dependency X -> Y, determinant X must strictly be a candidate key / superkey.",
+        "topic_id": "a9103e22-8d4b-4f91-a1b2-c3d4e5f6a7b8",
+        "topic_title": "Boyce-Codd Normal Form",
+        "source": {
+          "material_id": "mat-3f89a1-uuid",
+          "material_name": "Unit 3 Normalization Notes",
+          "page_number": 4
+        }
+      },
+      {
+        "id": "q-2",
+        "question": "Which normal form specifically addresses and removes transitive functional dependencies?",
+        "type": "multiple_choice",
+        "options": [
+          "A) First Normal Form (1NF)",
+          "B) Second Normal Form (2NF)",
+          "C) Third Normal Form (3NF)",
+          "D) Fourth Normal Form (4NF)"
+        ],
+        "correct_answer": "C) Third Normal Form (3NF)",
+        "explanation": "3NF eliminates transitive dependencies where a non-prime attribute depends on another non-prime attribute.",
+        "topic_id": "a9103e22-8d4b-4f91-a1b2-c3d4e5f6a7b8",
+        "topic_title": "Boyce-Codd Normal Form",
+        "source": {
+          "material_id": "mat-3f89a1-uuid",
+          "material_name": "Unit 3 Normalization Notes",
+          "page_number": 4
+        }
+      }
+    ],
+    "model": "gemini-3.8-flash"
+  },
+  "message": "Quiz generated successfully"
+}
+```
+
+#### Success Response B: Grounded in Topic Name Alone (No Material Chunks Exist) (200 OK)
+```json
+{
+  "success": true,
+  "data": {
+    "quiz_id": "9b8a7c6d-5e4f-3a2b-1c0d-e1f2a3b4c5d6",
+    "subject_id": "c1f6d3a8-4b2e-4a9f-8e2b-1a2c3d4e5f6a",
+    "subject_name": "Database Management Systems",
+    "topic_id": "a9103e22-8d4b-4f91-a1b2-c3d4e5f6a7b8",
+    "topic_title": "Boyce-Codd Normal Form",
+    "grounded": false,
+    "grounding_type": "topic_syllabus",
+    "source_materials": [],
+    "questions": [ ... ],
+    "model": "gemini-3.8-flash"
+  },
+  "message": "Quiz generated successfully"
+}
+```
+
+#### Error Responses
+- **400 Bad Request** (`ValidationError`): Missing `subject_id` or invalid UUID format.
+- **401 Unauthorized** (`Unauthorized`): Missing or invalid Bearer token.
+- **404 Not Found** (`NotFound`): Subject does not exist or does not belong to student.
+- **405 Method Not Allowed** (`MethodNotAllowed`): Sent `GET` instead of `POST`.
+- **500 Internal Server Error** (`QuizGenerationError`): Upstream model failure or server error.
+
+---
+
+### 14.2 Submit & Score Quiz
+- **Method**: `POST`
+- **Path**: `/api/quiz/submit`  
+  *(Alias: `/api/rag/quiz/submit`)*
+- **Auth**: Protected (`Authorization: Bearer <access_token>`)
+- **Headers**:
+  ```http
+  Authorization: Bearer <access_token>
+  Content-Type: application/json
+  ```
+
+#### Request Body (`application/json`)
+| Field | Type | Required | Default | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `subject_id` | UUID | **Yes** | — | Subject identifier |
+| `topic_id` | UUID | No | `null` | Optional topic identifier |
+| `answers` | Array | **Yes** | — | List of student answers to evaluate (min 1) |
+| `answers[].user_answer` | String | **Yes\*** | — | Student's chosen answer or typed response (accepts `selected_answer`) |
+| `answers[].correct_answer`| String | **Yes** | — | The verified correct answer string |
+| `answers[].question_id` | String | No | — | Optional identifier of question (e.g. `"q-1"`) |
+| `answers[].question` | String | No | — | Optional question text for review |
+| `answers[].explanation` | String | No | — | Optional pedagogical explanation |
+| `answers[].topic_id` | UUID | No | `null` | Topic associated with question |
+| `answers[].topic_title` | String | No | — | Topic name used for weak topic tracking if missed |
+
+##### Example Request:
+```json
+{
+  "subject_id": "c1f6d3a8-4b2e-4a9f-8e2b-1a2c3d4e5f6a",
+  "topic_id": "a9103e22-8d4b-4f91-a1b2-c3d4e5f6a7b8",
+  "answers": [
+    {
+      "question_id": "q-1",
+      "question": "What is required for BCNF?",
+      "user_answer": "A) For every non-trivial functional dependency X -> Y, X must be a superkey",
+      "correct_answer": "A) For every non-trivial functional dependency X -> Y, X must be a superkey",
+      "topic_title": "Boyce-Codd Normal Form"
+    },
+    {
+      "question_id": "q-2",
+      "question": "Which normal form removes transitive dependencies?",
+      "user_answer": "C",
+      "correct_answer": "C) Third Normal Form (3NF)",
+      "topic_title": "Normalization"
+    },
+    {
+      "question_id": "q-3",
+      "question": "What property can be lost in BCNF?",
+      "user_answer": "A) Lossless join decomposition",
+      "correct_answer": "B) Dependency preservation",
+      "topic_title": "Boyce-Codd Normal Form"
+    },
+    {
+      "question_id": "q-4",
+      "question": "What does Atomicity mean in ACID?",
+      "user_answer": "All or nothing execution",
+      "correct_answer": "All or nothing execution",
+      "topic_title": "Transactions & ACID"
+    },
+    {
+      "question_id": "q-5",
+      "question": "Explain Isolation in ACID.",
+      "user_answer": "Speed of queries",
+      "correct_answer": "Concurrent transactions do not interfere with each other",
+      "topic_title": "Transactions & ACID"
+    }
+  ]
+}
+```
+
+#### Success Response (201 Created)
+```json
+{
+  "success": true,
+  "data": {
+    "quiz_result_id": "d4e5f6a7-b8c9-0a1b-2c3d-4e5f6a7b8c9d",
+    "subject_id": "c1f6d3a8-4b2e-4a9f-8e2b-1a2c3d4e5f6a",
+    "topic_id": "a9103e22-8d4b-4f91-a1b2-c3d4e5f6a7b8",
+    "score": 60,
+    "total_questions": 5,
+    "correct_answers": 3,
+    "passed": true,
+    "weak_topics_identified": [
+      "Boyce-Codd Normal Form",
+      "Transactions & ACID"
+    ],
+    "question_evaluations": [
+      {
+        "question_id": "q-1",
+        "question": "What is required for BCNF?",
+        "user_answer": "A) For every non-trivial functional dependency X -> Y, X must be a superkey",
+        "correct_answer": "A) For every non-trivial functional dependency X -> Y, X must be a superkey",
+        "is_correct": true,
+        "topic_title": "Boyce-Codd Normal Form"
+      },
+      {
+        "question_id": "q-2",
+        "question": "Which normal form removes transitive dependencies?",
+        "user_answer": "C",
+        "correct_answer": "C) Third Normal Form (3NF)",
+        "is_correct": true,
+        "topic_title": "Normalization"
+      },
+      {
+        "question_id": "q-3",
+        "question": "What property can be lost in BCNF?",
+        "user_answer": "A) Lossless join decomposition",
+        "correct_answer": "B) Dependency preservation",
+        "is_correct": false,
+        "topic_title": "Boyce-Codd Normal Form"
+      },
+      {
+        "question_id": "q-4",
+        "question": "What does Atomicity mean in ACID?",
+        "user_answer": "All or nothing execution",
+        "correct_answer": "All or nothing execution",
+        "is_correct": true,
+        "topic_title": "Transactions & ACID"
+      },
+      {
+        "question_id": "q-5",
+        "question": "Explain Isolation in ACID.",
+        "user_answer": "Speed of queries",
+        "correct_answer": "Concurrent transactions do not interfere with each other",
+        "is_correct": false,
+        "topic_title": "Transactions & ACID"
+      }
+    ],
+    "updated_readiness": {
+      "readiness_percentage": 68,
+      "breakdown": {
+        "topic_completion": 50,
+        "quiz_performance": 60,
+        "revision_activity": 0,
+        "assignment_completion": 100
+      },
+      "active_risks_count": 1
+    },
+    "created_at": "2026-09-25T01:05:00.000Z"
+  },
+  "message": "Quiz submitted and scored successfully"
+}
+```
+
+#### Error Responses
+- **400 Bad Request** (`ValidationError`): Missing `subject_id`, empty `answers` array, or missing answer strings.
+- **401 Unauthorized** (`Unauthorized`): Missing or invalid Bearer token.
+- **404 Not Found** (`NotFound`): Subject does not exist or does not belong to student.
+- **405 Method Not Allowed** (`MethodNotAllowed`): Sent `GET` instead of `POST`.
+- **500 Internal Server Error** (`QuizSubmissionError`): Database insertion or readiness calculation failure.
+
+
 
 
 

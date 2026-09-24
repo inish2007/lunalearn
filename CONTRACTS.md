@@ -981,5 +981,113 @@ Recommended for automated tests, programmatic scripts, and base64 integrations.
 - **404 Not Found** (`ProcessingError`): Subject or Unit ID does not exist or belongs to another user.
 - **415 Unsupported Media Type** (`UnsupportedMediaType`): Content-Type header is neither `multipart/form-data` nor `application/json`.
 
+---
+
+### 12.2 Semantic Search & Vector Retrieval (`/api/rag/search`)
+
+> **Track Owner**: P3 (AI & RAG Track).  
+> **Status**: Phase 2 Active.  
+> **Core Pipeline**: Natural Language Query $\to$ Gemini Embedding API (`gemini-embedding-001`, 1536-dim vector) $\to$ pgvector Cosine Distance Search (`document_chunks` scoped to `profile_id` & optional `subject_id`/`material_id`) $\to$ Top Matching Chunks with Similarity Scores and Source Material Metadata.
+
+#### Endpoint Details
+- **Method**: `POST`
+- **Path**: `/api/rag/search`  
+  *(Alias: `/api/rag/retrieve`)*
+- **Auth**: Protected (`Authorization: Bearer <access_token>`)
+- **Headers**:
+  ```http
+  Authorization: Bearer <access_token>
+  Content-Type: application/json
+  ```
+
+#### Request Body (`application/json`)
+| Field | Type | Required | Default | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `query` | String | **Yes** | — | Natural-language query string (1 to 2000 characters) |
+| `subject_id` | UUID | No | `null` | Optional scope filter to chunks belonging to a specific subject |
+| `material_id` | UUID | No | `null` | Optional scope filter to chunks from a specific uploaded document |
+| `top_k` | Integer | No | `5` | Maximum number of top matching chunks to return (1 to 50) |
+| `threshold` | Number | No | `0.3` | Minimum cosine similarity threshold (0.0 to 1.0) |
+
+##### Example Request:
+```json
+{
+  "query": "What is Boyce-Codd Normal Form and how does it handle functional dependencies?",
+  "subject_id": "c1f6d3a8-4b2e-4a9f-8e2b-1a2c3d4e5f6a",
+  "top_k": 3,
+  "threshold": 0.4
+}
+```
+
+#### Pipeline & Retrieval Execution
+1. **Model Resolution**: Uses Google Gemini's currently recommended embedding model: `gemini-embedding-001` with `outputDimensionality: 1536` (matching Postgres `vector(1536)`). Configurable via `GEMINI_EMBEDDING_MODEL` environment variable.
+2. **Query Vectorization**: Generates high-dimensional vector representation of the student's natural-language query via the Gemini API embedding endpoint.
+3. **Database Scoping & RLS**: Guarantees strict multi-tenant isolation by enforcing `profile_id = auth.uid()` on all queries.
+4. **pgvector Similarity Search**: Executes vector similarity ranking using Postgres cosine distance operator (`1 - (embedding <=> query_vector)`).
+   - Primary: Supabase RPC `match_document_chunks` for fast indexed ANN vector retrieval.
+   - Dual-Mode Fallback: High-precision in-memory cosine similarity calculation when running in local development or test environments.
+5. **Metadata Hydration**: Enriches matching chunks with parent `materials` metadata (document name, storage path, file type) and page/chunk index positions.
+
+#### Success Response (200 OK)
+```json
+{
+  "success": true,
+  "data": {
+    "query": "What is Boyce-Codd Normal Form and how does it handle functional dependencies?",
+    "matches_count": 2,
+    "results": [
+      {
+        "chunk_id": "f5a2b3c4-1234-5678-90ab-cdef12345678",
+        "material_id": "mat-3f89a1-uuid",
+        "content": "Boyce-Codd Normal Form (BCNF) is a stricter version of 3NF. A relation R is in BCNF if and only if for every non-trivial functional dependency X -> Y, X is a superkey of R. Unlike 3NF, BCNF does not permit Y to be a prime attribute when X is not a superkey.",
+        "similarity": 0.892,
+        "page_number": 4,
+        "chunk_index": 7,
+        "material": {
+          "id": "mat-3f89a1-uuid",
+          "name": "Unit 3 · Normalization Lecture Notes",
+          "storage_path": "e3b0c442-98fc-1c14-9af0-2b9a7b9efb7f/c1f6d3a8-4b2e-4a9f-8e2b-1a2c3d4e5f6a/dbms_unit3.pdf",
+          "file_type": "PDF"
+        },
+        "metadata": {
+          "subject_id": "c1f6d3a8-4b2e-4a9f-8e2b-1a2c3d4e5f6a",
+          "unit_id": "u1f6d3a8-4b2e-4a9f-8e2b-1a2c3d4e5f6b",
+          "char_count": 248,
+          "word_count": 42
+        }
+      },
+      {
+        "chunk_id": "e4d3c2b1-5678-90ab-cdef-1234567890ab",
+        "material_id": "mat-3f89a1-uuid",
+        "content": "Third Normal Form vs BCNF: If a relation is in 3NF, it may still suffer from anomalies if there are multiple overlapping candidate keys. BCNF resolves this by removing all dependencies where the determinant is not a superkey.",
+        "similarity": 0.824,
+        "page_number": 5,
+        "chunk_index": 8,
+        "material": {
+          "id": "mat-3f89a1-uuid",
+          "name": "Unit 3 · Normalization Lecture Notes",
+          "storage_path": "e3b0c442-98fc-1c14-9af0-2b9a7b9efb7f/c1f6d3a8-4b2e-4a9f-8e2b-1a2c3d4e5f6a/dbms_unit3.pdf",
+          "file_type": "PDF"
+        },
+        "metadata": {
+          "subject_id": "c1f6d3a8-4b2e-4a9f-8e2b-1a2c3d4e5f6a",
+          "unit_id": "u1f6d3a8-4b2e-4a9f-8e2b-1a2c3d4e5f6b",
+          "char_count": 215,
+          "word_count": 34
+        }
+      }
+    ]
+  },
+  "message": "Top 2 matching chunks retrieved"
+}
+```
+
+#### Error Responses
+- **400 Bad Request** (`ValidationError`): Missing `query` string, empty string, or invalid UUID format for `subject_id`/`material_id`.
+- **401 Unauthorized** (`Unauthorized`): Missing or invalid Bearer token.
+- **405 Method Not Allowed** (`MethodNotAllowed`): Sent `GET` instead of `POST`.
+- **500 Internal Server Error** (`SearchError`): Gemini API connection or embedding failure.
+
+
 
 

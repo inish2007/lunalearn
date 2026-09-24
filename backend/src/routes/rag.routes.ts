@@ -3,7 +3,8 @@ import busboy from 'busboy';
 import { requireAuth } from '../middleware/auth.middleware.js';
 import { sendSuccess, sendError } from '../routes/domain.routes.js';
 import { RagMaterialService } from '../services/rag-material.service.js';
-import { UploadPdfJsonSchema } from '../types/rag.js';
+import { SemanticSearchService } from '../services/semantic-search.service.js';
+import { UploadPdfJsonSchema, SemanticSearchSchema } from '../types/rag.js';
 
 /**
  * Parses multipart/form-data requests using busboy.
@@ -189,6 +190,59 @@ export async function handleRagRoutes(req: http.IncomingMessage, res: http.Serve
           message,
           isClientError ? 400 : 500
         );
+      }
+    });
+
+    await handler(req, res);
+    return true;
+  }
+
+  // ----------------------------------------------------------------------------
+  // 2. Semantic Search & Vector Retrieval (/api/rag/search, /api/rag/retrieve)
+  // ----------------------------------------------------------------------------
+  const isSearchRoute =
+    pathname === '/api/rag/search' ||
+    pathname === '/api/rag/retrieve';
+
+  if (isSearchRoute) {
+    if (method !== 'POST') {
+      sendError(res, 'MethodNotAllowed', `Method ${method} not supported on ${pathname}. Use POST.`, 405);
+      return true;
+    }
+
+    const handler = requireAuth(async (req, res, ctx) => {
+      try {
+        const body = await parseJson(req);
+        const parsed = SemanticSearchSchema.safeParse(body);
+        if (!parsed.success) {
+          return sendError(
+            res,
+            'ValidationError',
+            'Invalid semantic search payload',
+            400,
+            parsed.error.issues.map(i => ({ field: i.path.join('.'), message: i.message }))
+          );
+        }
+
+        const results = await SemanticSearchService.search({
+          db: ctx.db,
+          profileId: ctx.user.id,
+          query: parsed.data.query,
+          subjectId: parsed.data.subject_id,
+          materialId: parsed.data.material_id,
+          topK: parsed.data.top_k,
+          threshold: parsed.data.threshold
+        });
+
+        return sendSuccess(
+          res,
+          results,
+          200,
+          `Top ${results.matches_count} matching chunks retrieved`
+        );
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Error executing semantic search';
+        return sendError(res, 'SearchError', message, 500);
       }
     });
 

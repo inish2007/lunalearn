@@ -18,7 +18,8 @@
     "test:engine": "tsx src/scripts/test-engine.ts",
     "test:planner": "tsx src/scripts/test-planner.ts",
     "test:rag": "tsx src/scripts/test-rag-phase1.ts",
-    "test": "tsx src/scripts/test-auth.ts && tsx src/scripts/test-crud.ts && tsx src/scripts/test-engine.ts && tsx src/scripts/test-planner.ts && tsx src/scripts/test-e2e-loop.ts && tsx src/scripts/test-rag-phase1.ts"
+    "test:rag2": "tsx src/scripts/test-rag-phase2.ts",
+    "test": "tsx src/scripts/test-auth.ts && tsx src/scripts/test-crud.ts && tsx src/scripts/test-engine.ts && tsx src/scripts/test-planner.ts && tsx src/scripts/test-e2e-loop.ts && tsx src/scripts/test-rag-phase1.ts && tsx src/scripts/test-rag-phase2.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.4",

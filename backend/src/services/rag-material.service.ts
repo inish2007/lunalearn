@@ -3,6 +3,7 @@ import { Database, Material } from '../types/database.js';
 import { StorageService } from './storage.service.js';
 import { PdfService } from './pdf.service.js';
 import { ChunkingService } from './chunking.service.js';
+import { EmbeddingService } from './embedding.service.js';
 import {
   RagUploadResponseData,
   ChunkPreview,
@@ -114,15 +115,17 @@ export class RagMaterialService {
     const materialData: Material = materialDataRaw as Material;
     const materialId = materialData.id;
 
-    // 7. Insert each chunk into the existing 'document_chunks' table
-    // Leaving embedding column as NULL for now (to be populated in Phase 2 Embedding Pipeline)
-    const chunkRows = chunkDrafts.map(draft => ({
+    // 7. Insert each chunk into the existing 'document_chunks' table with Gemini vector embedding
+    const chunkContents = chunkDrafts.map(d => d.content);
+    const embeddings = await EmbeddingService.embedBatch(chunkContents);
+
+    const chunkRows = chunkDrafts.map((draft, idx) => ({
       material_id: materialId,
       profile_id: profileId,
       content: draft.content,
       chunk_index: draft.chunk_index,
       page_number: draft.page_number,
-      embedding: null, // explicit null
+      embedding: embeddings[idx] || null,
       metadata: {
         ...draft.metadata,
         material_id: materialId,

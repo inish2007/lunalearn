@@ -20,6 +20,8 @@ export * from './services/storage.service.js';
 export * from './services/pdf.service.js';
 export * from './services/chunking.service.js';
 export * from './services/rag-material.service.js';
+export * from './services/embedding.service.js';
+export * from './services/semantic-search.service.js';
 export * from './middleware/auth.middleware.js';
 export * from './routes/domain.routes.js';
 export * from './routes/academic.routes.js';
@@ -107,7 +109,8 @@ export const server = http.createServer(async (req, res) => {
         'GET    /api/risks (protected)',
         'GET    /api/planner/context (protected)',
         'GET    /api/planner/context/:subjectId (protected)',
-        'POST   /api/rag/upload (protected)'
+        'POST   /api/rag/upload (protected)',
+        'POST   /api/rag/search (protected)'
       ],
       timestamp: new Date().toISOString()
     }));
@@ -130,7 +133,7 @@ export const server = http.createServer(async (req, res) => {
   const plannerHandled = await handlePlannerRoutes(req, res);
   if (plannerHandled) return;
 
-  // 5. AI/RAG Routes Dispatcher (Phase 1 PDF Pipeline & Materials Upload)
+  // 5. AI/RAG Routes Dispatcher (Phase 1 PDF Pipeline & Materials Upload, Phase 2 Semantic Search)
   const ragHandled = await handleRagRoutes(req, res);
   if (ragHandled) return;
 
@@ -151,7 +154,8 @@ export const server = http.createServer(async (req, res) => {
       '/api/readiness',
       '/api/risks',
       '/api/planner/context',
-      '/api/rag/upload'
+      '/api/rag/upload',
+      '/api/rag/search'
     ]
   }));
 });

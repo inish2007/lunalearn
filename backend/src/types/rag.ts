@@ -87,3 +87,39 @@ export interface RagUploadResponseData {
   total_characters: number;
   sample_chunks: ChunkPreview[];
 }
+
+// ==============================================================================
+// AI/RAG Track Phase 2 — Semantic Search & Vector Retrieval Schemas
+// ==============================================================================
+
+export const SemanticSearchSchema = z.object({
+  query: z.string().min(1, { message: 'Search query cannot be empty' }).max(2000),
+  subject_id: z.string().uuid({ message: 'subject_id must be a valid UUID' }).optional().nullable(),
+  material_id: z.string().uuid({ message: 'material_id must be a valid UUID' }).optional().nullable(),
+  top_k: z.number().int().min(1).max(50).default(5),
+  threshold: z.number().min(0).max(1).default(0.3)
+});
+
+export type SemanticSearchInput = z.infer<typeof SemanticSearchSchema>;
+
+export interface SearchResultChunk {
+  chunk_id: string;
+  material_id: string;
+  content: string;
+  similarity: number;
+  page_number: number | null;
+  chunk_index: number;
+  material: {
+    id: string;
+    name: string;
+    storage_path: string;
+    file_type?: string;
+  };
+  metadata: Record<string, unknown>;
+}
+
+export interface SemanticSearchResponseData {
+  query: string;
+  matches_count: number;
+  results: SearchResultChunk[];
+}

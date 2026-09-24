@@ -17,16 +17,20 @@
     "test:crud": "tsx src/scripts/test-crud.ts",
     "test:engine": "tsx src/scripts/test-engine.ts",
     "test:planner": "tsx src/scripts/test-planner.ts",
-    "test:e2e": "tsx src/scripts/test-e2e-loop.ts",
-    "test": "tsx src/scripts/test-auth.ts && tsx src/scripts/test-crud.ts && tsx src/scripts/test-engine.ts && tsx src/scripts/test-planner.ts && tsx src/scripts/test-e2e-loop.ts"
+    "test:rag": "tsx src/scripts/test-rag-phase1.ts",
+    "test": "tsx src/scripts/test-auth.ts && tsx src/scripts/test-crud.ts && tsx src/scripts/test-engine.ts && tsx src/scripts/test-planner.ts && tsx src/scripts/test-e2e-loop.ts && tsx src/scripts/test-rag-phase1.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.4",
+    "busboy": "^1.6.0",
     "dotenv": "^16.4.5",
+    "pdf-parse": "^2.4.5",
     "zod": "^3.23.8"
   },
   "devDependencies": {
+    "@types/busboy": "^1.5.4",
     "@types/node": "^20.14.10",
+    "@types/pdf-parse": "^1.1.5",
     "tsx": "^4.19.1",
     "typescript": "^5.5.4"
   }

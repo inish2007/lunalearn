@@ -889,4 +889,97 @@ Packages everything the adaptive planner and AI/RAG track needs in a **single ca
   }
   ```
 
+---
+
+## 12. AI/RAG Track — Materials Upload & PDF Pipeline (`/api/rag/upload`)
+
+> **Track Owner**: P3 (AI & RAG Track).  
+> **Status**: Phase 1 Active.  
+> **Core Pipeline**: PDF File Ingestion $\to$ Supabase Storage $\to$ Text Extraction $\to$ Overlapping Chunking $\to$ `materials` Record & `document_chunks` Batch Insertion.
+
+### 12.1 Upload and Process PDF Document
+- **Method**: `POST`
+- **Path**: `/api/rag/upload`  
+  *(Aliases: `/api/rag/materials/upload`, `/api/materials/upload/pdf`)*
+- **Auth**: Protected (`Authorization: Bearer <access_token>`)
+- **Supported Encodings**: `multipart/form-data` OR `application/json` (dual-mode support)
+
+#### Request Format A: `multipart/form-data`
+Recommended for browser file pickers and standard form uploads.
+| Field | Type | Required | Description |
+| :--- | :--- | :--- | :--- |
+| `file` | Binary (PDF) | **Yes** | The PDF file buffer to upload and process |
+| `subject_id` | UUID | **Yes** | Owning subject ID (validated under RLS) |
+| `unit_id` | UUID | No | Optional syllabus unit ID to link the material to |
+| `name` / `custom_name` | String | No | Custom display title for the material |
+
+#### Request Format B: `application/json`
+Recommended for automated tests, programmatic scripts, and base64 integrations.
+```json
+{
+  "subject_id": "c1f6d3a8-4b2e-4a9f-8e2b-1a2c3d4e5f6a",
+  "unit_id": "u1f6d3a8-4b2e-4a9f-8e2b-1a2c3d4e5f6b",
+  "file_name": "DBMS_Unit3_Normalization.pdf",
+  "file_base64": "JVBERi0xLjQKMSAwIG9iai...",
+  "custom_name": "Unit 3 · Normalization Lecture Notes"
+}
+```
+
+#### Pipeline Execution Details:
+1. **Security & RLS Validation**: Enforces that `subject_id` and `unit_id` exist and belong to the authenticated user.
+2. **Supabase Storage**: Stores the raw binary file in the `materials` Supabase Storage bucket under `<profile_id>/<subject_id>/<timestamp>_<clean_name>.pdf`.
+3. **Text Extraction**: Uses `PdfService` to extract clean text and detect per-page content and total page counts.
+4. **Overlapping Chunking**: Splits extracted text using `ChunkingService` into chunks sized for embedding (~800 characters target, ~160 characters overlap) while preserving sentence and paragraph boundaries.
+5. **Materials Metadata Record**: Creates or updates a record in the existing `materials` table with `processed: true`, `file_type: 'PDF'`, `size_bytes`, `storage_path`, and `processing_status: 'completed'`.
+6. **Document Chunks Insertion**: Inserts each chunk into `document_chunks` table linking to `material_id`, `profile_id`, `chunk_index`, and `page_number`, with `embedding: null` (to be vectorized in Phase 2 Embedding Pipeline) and rich metadata linking back to `subject_id` and `unit_id`.
+
+#### Success Response (201 Created)
+```json
+{
+  "success": true,
+  "data": {
+    "material": {
+      "id": "mat-3f89a1-uuid",
+      "profile_id": "e3b0c442-98fc-1c14-9af0-2b9a7b9efb7f",
+      "subject_id": "c1f6d3a8-4b2e-4a9f-8e2b-1a2c3d4e5f6a",
+      "unit_id": "u1f6d3a8-4b2e-4a9f-8e2b-1a2c3d4e5f6b",
+      "name": "Unit 3 · Normalization Lecture Notes",
+      "storage_path": "e3b0c442-98fc-1c14-9af0-2b9a7b9efb7f/c1f6d3a8-4b2e-4a9f-8e2b-1a2c3d4e5f6a/1727200000000_dbms_unit3_normalization.pdf",
+      "file_type": "PDF",
+      "size_bytes": 2457600,
+      "processed": true,
+      "processing_status": "completed",
+      "created_at": "2026-09-24T18:00:00.000Z",
+      "updated_at": "2026-09-24T18:00:00.000Z"
+    },
+    "chunks_created": 14,
+    "total_pages": 3,
+    "total_characters": 8920,
+    "sample_chunks": [
+      {
+        "chunk_index": 0,
+        "page_number": 1,
+        "content_preview": "Unit 3: Relational Database Design and Normalization. Normalization is the process of organizing data...",
+        "char_count": 780
+      },
+      {
+        "chunk_index": 1,
+        "page_number": 1,
+        "content_preview": "First Normal Form (1NF) requires that all attribute values be atomic. Second Normal Form (2NF)...",
+        "char_count": 810
+      }
+    ]
+  },
+  "message": "PDF uploaded, processed, and chunked successfully"
+}
+```
+
+#### Error Responses
+- **400 Bad Request** (`ValidationError`): Missing `subject_id`, invalid UUID, or empty file buffer.
+- **400 Bad Request** (`ProcessingError`): Invalid PDF format, corrupted PDF structure, or scanned document with 0 extractable text.
+- **401 Unauthorized** (`Unauthorized`): Missing or invalid Bearer token.
+- **404 Not Found** (`ProcessingError`): Subject or Unit ID does not exist or belongs to another user.
+- **415 Unsupported Media Type** (`UnsupportedMediaType`): Content-Type header is neither `multipart/form-data` nor `application/json`.
+
+
 

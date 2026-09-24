@@ -12,6 +12,16 @@ button, input, textarea { font: inherit; }
 .wave-line { stroke-dasharray: 600; animation: draw 1.7s ease-out both; }
 .shimmer { background: linear-gradient(110deg,#eeeafa 30%,#fff 45%,#eeeafa 60%); background-size: 200% 100%; animation: shimmer 1.6s linear infinite; }
 .gradient-orb { filter: blur(42px); opacity: .35; }
+.glare-hover { position: relative; isolation: isolate; overflow: hidden; transition: transform .25s ease, box-shadow .25s ease, border-color .25s ease; }
+.glare-hover::after { content: ''; position: absolute; z-index: -1; top: -120%; left: -85%; width: 52%; height: 300%; pointer-events: none; background: linear-gradient(105deg,transparent 39%,rgba(255,255,255,.64) 50%,transparent 61%); transform: translateX(-145%) rotate(12deg); transition: transform .7s cubic-bezier(.2,.7,.2,1); }
+.glare-hover:hover { transform: translateY(-2px); border-color: rgba(75,45,184,.22); box-shadow: 0 16px 36px rgba(48,31,107,.11); }
+.glare-hover:hover::after { transform: translateX(470%) rotate(12deg); }
+.pill-nav-effect { position: relative; transition: transform .2s ease, background-color .2s ease, color .2s ease, box-shadow .2s ease; }
+.pill-nav-effect:hover { transform: translateX(3px); }
+.progress-fill { transform-origin: left; animation: progressReveal .85s cubic-bezier(.2,.8,.2,1) both; }
+.click-spark { position: fixed; z-index: 100; width: 7px; height: 7px; margin: -3.5px; border-radius: 999px; pointer-events: none; background: #8b5cf6; box-shadow: 0 0 10px rgba(139,92,246,.9); animation: clickSpark .48s ease-out forwards; }
+@keyframes progressReveal { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@keyframes clickSpark { to { transform: translate(var(--spark-x),var(--spark-y)) scale(0); opacity: 0; } }
 @keyframes pageFade { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
 @keyframes floatIn { from { opacity: 0; transform: translateY(22px) scale(.98); } to { opacity: 1; transform: none; } }
 @keyframes pulseRing { 50% { transform: scale(1.07); opacity: .55; } }

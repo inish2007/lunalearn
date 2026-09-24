@@ -2,6 +2,7 @@ import http from 'http';
 import { env } from './config/env.js';
 import { handleAuthRoutes } from './routes/auth.routes.js';
 import { handleDomainRoutes } from './routes/domain.routes.js';
+import { handleAcademicRoutes } from './routes/academic.routes.js';
 
 export * from './config/env.js';
 export * from './lib/supabase.js';
@@ -10,8 +11,10 @@ export * from './types/database.js';
 export * from './types/auth.js';
 export * from './types/domain.js';
 export * from './services/auth.service.js';
+export * from './services/academic-engine.service.js';
 export * from './middleware/auth.middleware.js';
 export * from './routes/domain.routes.js';
+export * from './routes/academic.routes.js';
 
 const PORT = parseInt(env.PORT, 10);
 
@@ -87,7 +90,11 @@ export const server = http.createServer(async (req, res) => {
         'POST   /api/materials (protected)',
         'GET    /api/materials/:id (protected)',
         'PATCH  /api/materials/:id (protected)',
-        'DELETE /api/materials/:id (protected)'
+        'DELETE /api/materials/:id (protected)',
+        'GET    /api/readiness/:subjectId (protected)',
+        'GET    /api/readiness (protected)',
+        'GET    /api/risks/:subjectId (protected)',
+        'GET    /api/risks (protected)'
       ],
       timestamp: new Date().toISOString()
     }));
@@ -102,6 +109,10 @@ export const server = http.createServer(async (req, res) => {
   const domainHandled = await handleDomainRoutes(req, res);
   if (domainHandled) return;
 
+  // 3. Academic Engine (Readiness & Risk) Routes Dispatcher
+  const academicHandled = await handleAcademicRoutes(req, res);
+  if (academicHandled) return;
+
   // 404 Route Not Found
   res.writeHead(404, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify({
@@ -115,7 +126,9 @@ export const server = http.createServer(async (req, res) => {
       '/api/topics',
       '/api/tasks',
       '/api/exams',
-      '/api/materials'
+      '/api/materials',
+      '/api/readiness',
+      '/api/risks'
     ]
   }));
 });
@@ -137,6 +150,7 @@ if (process.env.NODE_ENV !== 'test') {
     console.log(`   API Status:       http://localhost:${PORT}/api/status`);
     console.log(`   Auth Routes:      http://localhost:${PORT}/api/auth/*`);
     console.log(`   Domain CRUD:      http://localhost:${PORT}/api/{subjects,units,topics,tasks,exams,materials}`);
+    console.log(`   Academic Engine:  http://localhost:${PORT}/api/{readiness,risks}`);
     console.log('====================================================');
   });
 }

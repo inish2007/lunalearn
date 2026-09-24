@@ -556,30 +556,179 @@ Every API response adheres to a consistent envelope structure:
 
 ---
 
-## 10. Academic Engine Contracts Preview (Layer 4)
+## 10. Academic Engine Contracts (Phase 4)
 
-For P1 (Dashboard widgets) and P3 (Planner & AI assistant inputs):
+Pure, deterministic mathematical and rule calculations with zero AI/LLM calls. Available for frontend dashboards, study plan generators, and revision prioritizers.
 
-### Readiness Formula
+### 10.1 Mathematical Formulas & Rules
+
+#### 1. Readiness Formula
 $$\text{Readiness} = (\text{TopicCompletion} \times 0.40) + (\text{QuizPerformance} \times 0.30) + (\text{RevisionActivity} \times 0.20) + (\text{AssignmentCompletion} \times 0.10)$$
 
-### Risk Object Standard
-Every academic risk object follows `{ type, reason, severity }`:
-```typescript
-interface AcademicRisk {
-  type: 'HIGH_EXAM_RISK' | 'DEADLINE_RISK' | 'PERFORMANCE_RISK' | 'WORKLOAD_RISK';
-  reason: string;     // Explicit human-readable explanation, never a bare label
-  severity: 'high' | 'medium' | 'low';
-  subject_id?: string;
-  metadata?: Record<string, unknown>;
-}
-```
-Example Risk Payload:
-```json
-{
-  "type": "HIGH_EXAM_RISK",
-  "reason": "DBMS Mid-semester is in 6 days and 2 critical topics (Normalization, Transactions) are marked as weak.",
-  "severity": "high",
-  "subject_id": "c1f6d3a8-4b2e-4a9f-8e2b-1a2c3d4e5f6a"
-}
-```
+- **Topic Completion (40%)**: $(\text{Completed Topics} / \text{Total Topics}) \times 100$. If 0 topics exist, defaults to 0%.
+- **Quiz Performance (30%)**: Average score (0–100%) of recent quiz attempts for the subject. If no quizzes taken, defaults to 0%.
+- **Revision Activity (20%)**: Total logged study session duration in minutes measured against a 120-minute benchmark: $\min(100, (\text{duration} / 120) \times 100)$.
+- **Assignment Completion (10%)**: $(\text{Completed Assignments} / \text{Total Assignments}) \times 100$. If 0 assignments are registered for the subject, defaults to 100% (no outstanding assignment debt).
+
+#### 2. Reasoned Risk Rules
+Every detected risk adheres strictly to `{ type, reason, severity, subject_id?, metadata? }`:
+- **`HIGH_EXAM_RISK`**: Triggered when an exam is scheduled $\le 7$ days away and $\ge 2$ topics remain unfinished or marked weak. Severity: `high`.
+- **`DEADLINE_RISK`**: Triggered when an assignment is pending and due within 2 days (48 hours). Severity: `high` (if $\le 24$ hours) or `medium` (if $24 < \text{hours} \le 48$).
+- **`PERFORMANCE_RISK`**: Triggered when recent quiz performance drops by $\ge 10\%$ between attempts or falls below 60%. Severity: `high` (if $< 50\%$) or `medium` (if $50 \le \text{score} < 60\%$).
+- **`WORKLOAD_RISK`**: Triggered when $\ge 2$ assignment deadlines or exams fall on the exact same calendar date. Severity: `high` (if $\ge 3$ deadlines) or `medium` (if 2 deadlines).
+
+---
+
+### 10.2 Get Subject Readiness
+- **Method**: `GET`
+- **Path**: `/api/readiness/:subjectId`
+- **Auth**: Protected (Requires Bearer JWT)
+- **Success Response (200 OK)**:
+  ```json
+  {
+    "success": true,
+    "data": {
+      "subject_id": "c1f6d3a8-4b2e-4a9f-8e2b-1a2c3d4e5f6a",
+      "readiness_percentage": 59,
+      "breakdown": {
+        "topic_completion": 50,
+        "quiz_performance": 80,
+        "revision_activity": 25,
+        "assignment_completion": 100
+      },
+      "risks": [
+        {
+          "type": "HIGH_EXAM_RISK",
+          "reason": "Exam 'DBMS Mid-semester' is in 3 days, but 2 topics (B+ Trees, Transactions) remain unfinished or weak.",
+          "severity": "high",
+          "subject_id": "c1f6d3a8-4b2e-4a9f-8e2b-1a2c3d4e5f6a",
+          "metadata": {
+            "exam_id": "exam-1-uuid",
+            "days_away": 3,
+            "unfinished_count": 2
+          }
+        }
+      ]
+    }
+  }
+  ```
+
+### 10.3 Get All Subjects Readiness
+- **Method**: `GET`
+- **Path**: `/api/readiness`
+- **Auth**: Protected (Requires Bearer JWT)
+- **Success Response (200 OK)**:
+  ```json
+  {
+    "success": true,
+    "count": 2,
+    "data": [
+      {
+        "subject_id": "c1f6d3a8-4b2e-4a9f-8e2b-1a2c3d4e5f6a",
+        "readiness_percentage": 59,
+        "breakdown": {
+          "topic_completion": 50,
+          "quiz_performance": 80,
+          "revision_activity": 25,
+          "assignment_completion": 100
+        },
+        "risks": []
+      },
+      {
+        "subject_id": "d2e7f4b9-5c3f-5b0a-9f3c-2b3d4e5f6a7b",
+        "readiness_percentage": 92,
+        "breakdown": {
+          "topic_completion": 100,
+          "quiz_performance": 90,
+          "revision_activity": 85,
+          "assignment_completion": 100
+        },
+        "risks": []
+      }
+    ]
+  }
+  ```
+
+---
+
+### 10.4 Get Subject Risks
+- **Method**: `GET`
+- **Path**: `/api/risks/:subjectId`
+- **Auth**: Protected (Requires Bearer JWT)
+- **Success Response (200 OK)**:
+  ```json
+  {
+    "success": true,
+    "count": 2,
+    "data": [
+      {
+        "type": "DEADLINE_RISK",
+        "reason": "Assignment 'Normalization Exercise' is pending and due in 18 hours.",
+        "severity": "high",
+        "subject_id": "c1f6d3a8-4b2e-4a9f-8e2b-1a2c3d4e5f6a",
+        "metadata": {
+          "task_id": "task-1-uuid",
+          "hours_remaining": 18
+        }
+      },
+      {
+        "type": "PERFORMANCE_RISK",
+        "reason": "Recent quiz scores have declined by 15% (from 85% down to 70%).",
+        "severity": "medium",
+        "subject_id": "c1f6d3a8-4b2e-4a9f-8e2b-1a2c3d4e5f6a",
+        "metadata": {
+          "latestScore": 70,
+          "previousScore": 85,
+          "drop": 15
+        }
+      }
+    ]
+  }
+  ```
+
+### 10.5 Get All Student Risks
+- **Method**: `GET`
+- **Path**: `/api/risks`
+- **Auth**: Protected (Requires Bearer JWT)
+- **Success Response (200 OK)**:
+  ```json
+  {
+    "success": true,
+    "count": 3,
+    "data": [
+      {
+        "type": "HIGH_EXAM_RISK",
+        "reason": "Exam 'DBMS Mid-semester' is in 3 days, but 2 topics (B+ Trees, Transactions) remain unfinished or weak.",
+        "severity": "high",
+        "subject_id": "c1f6d3a8-4b2e-4a9f-8e2b-1a2c3d4e5f6a",
+        "metadata": {
+          "exam_id": "exam-1-uuid",
+          "days_away": 3,
+          "unfinished_count": 2
+        }
+      },
+      {
+        "type": "DEADLINE_RISK",
+        "reason": "Assignment 'Normalization Exercise' is pending and due in 18 hours.",
+        "severity": "high",
+        "subject_id": "c1f6d3a8-4b2e-4a9f-8e2b-1a2c3d4e5f6a",
+        "metadata": {
+          "task_id": "task-1-uuid",
+          "hours_remaining": 18
+        }
+      },
+      {
+        "type": "WORKLOAD_RISK",
+        "reason": "2 competing deadlines coincide on 2026-09-28: Normalization Exercise and Exam: Operating Systems Quiz.",
+        "severity": "medium",
+        "subject_id": "c1f6d3a8-4b2e-4a9f-8e2b-1a2c3d4e5f6a",
+        "metadata": {
+          "date": "2026-09-28",
+          "count": 2,
+          "titles": ["Normalization Exercise", "Exam: Operating Systems Quiz"]
+        }
+      }
+    ]
+  }
+  ```
+

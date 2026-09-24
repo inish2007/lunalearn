@@ -13,7 +13,8 @@
     "test:connection": "tsx src/scripts/test-connection.ts",
     "test:auth": "tsx src/scripts/test-auth.ts",
     "test:crud": "tsx src/scripts/test-crud.ts",
-    "test": "tsx src/scripts/test-auth.ts && tsx src/scripts/test-crud.ts"
+    "test:engine": "tsx src/scripts/test-engine.ts",
+    "test": "tsx src/scripts/test-auth.ts && tsx src/scripts/test-crud.ts && tsx src/scripts/test-engine.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.4",

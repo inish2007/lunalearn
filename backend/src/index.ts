@@ -3,6 +3,7 @@ import { env } from './config/env.js';
 import { handleAuthRoutes } from './routes/auth.routes.js';
 import { handleDomainRoutes } from './routes/domain.routes.js';
 import { handleAcademicRoutes } from './routes/academic.routes.js';
+import { handlePlannerRoutes } from './routes/planner.routes.js';
 
 export * from './config/env.js';
 export * from './lib/supabase.js';
@@ -12,9 +13,11 @@ export * from './types/auth.js';
 export * from './types/domain.js';
 export * from './services/auth.service.js';
 export * from './services/academic-engine.service.js';
+export * from './services/planner-context.service.js';
 export * from './middleware/auth.middleware.js';
 export * from './routes/domain.routes.js';
 export * from './routes/academic.routes.js';
+export * from './routes/planner.routes.js';
 
 const PORT = parseInt(env.PORT, 10);
 
@@ -94,7 +97,9 @@ export const server = http.createServer(async (req, res) => {
         'GET    /api/readiness/:subjectId (protected)',
         'GET    /api/readiness (protected)',
         'GET    /api/risks/:subjectId (protected)',
-        'GET    /api/risks (protected)'
+        'GET    /api/risks (protected)',
+        'GET    /api/planner/context (protected)',
+        'GET    /api/planner/context/:subjectId (protected)'
       ],
       timestamp: new Date().toISOString()
     }));
@@ -113,6 +118,10 @@ export const server = http.createServer(async (req, res) => {
   const academicHandled = await handleAcademicRoutes(req, res);
   if (academicHandled) return;
 
+  // 4. Adaptive Planner Unified Context Dispatcher
+  const plannerHandled = await handlePlannerRoutes(req, res);
+  if (plannerHandled) return;
+
   // 404 Route Not Found
   res.writeHead(404, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify({
@@ -128,7 +137,8 @@ export const server = http.createServer(async (req, res) => {
       '/api/exams',
       '/api/materials',
       '/api/readiness',
-      '/api/risks'
+      '/api/risks',
+      '/api/planner/context'
     ]
   }));
 });

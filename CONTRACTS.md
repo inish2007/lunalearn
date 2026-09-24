@@ -732,3 +732,161 @@ Every detected risk adheres strictly to `{ type, reason, severity, subject_id?, 
   }
   ```
 
+---
+
+## 11. Adaptive Planner Unified Context (Phase 5)
+
+Packages everything the adaptive planner and AI/RAG track needs in a **single call**, eliminating the need for five separate HTTP roundtrips across exams, topics, tasks, settings, and quizzes.
+
+### 11.1 Get Adaptive Planner Context
+- **Method**: `GET`
+- **Path**: `/api/planner/context` *(optional filter: `?subject_id=<uuid>` or `/api/planner/context/:subjectId`)*
+- **Auth**: Protected (Requires Bearer JWT)
+- **Description**: Deterministically aggregates the student's study availability, per-subject exam dates with countdowns, weak/unfinished topics, pending tasks, recent quiz performance, readiness breakdown, and active risks.
+- **Success Response (200 OK)**:
+  ```json
+  {
+    "success": true,
+    "data": {
+      "student": {
+        "id": "e3b0c442-98fc-1c14-9af0-2b9a7b9efb7f",
+        "full_name": "Aarav Patel",
+        "course": "Computer Science & Engineering",
+        "semester": 4,
+        "study_time_settings": {
+          "preferred_focus_time": "Evening (5:30 PM - 8:30 PM)",
+          "daily_study_target_minutes": 120,
+          "weekly_study_target_minutes": 840,
+          "available_hours_per_day": 2.0
+        }
+      },
+      "subjects": [
+        {
+          "subject_id": "c1f6d3a8-4b2e-4a9f-8e2b-1a2c3d4e5f6a",
+          "subject_name": "Database Management Systems",
+          "subject_code": "CS-401",
+          "subject_color": "#4B2DB8",
+          "readiness_percentage": 59,
+          "readiness_breakdown": {
+            "topic_completion": 50,
+            "quiz_performance": 70,
+            "revision_activity": 75,
+            "assignment_completion": 50
+          },
+          "exams": [
+            {
+              "id": "exam-1-uuid",
+              "title": "DBMS Mid-sem",
+              "exam_date": "2026-09-30T09:30:00.000Z",
+              "days_until_exam": 6,
+              "target_score": 85.0
+            }
+          ],
+          "weak_and_unfinished_topics": [
+            {
+              "id": "top-2-uuid",
+              "unit_id": "u1-uuid",
+              "unit_title": "Relational Model & Normalization",
+              "title": "Boyce-Codd Normal Form",
+              "status": "in_progress",
+              "is_weak": true,
+              "mastery_score": 45
+            },
+            {
+              "id": "top-3-uuid",
+              "unit_id": "u2-uuid",
+              "unit_title": "Transaction Processing",
+              "title": "ACID Properties",
+              "status": "completed",
+              "is_weak": true,
+              "mastery_score": 55
+            },
+            {
+              "id": "top-4-uuid",
+              "unit_id": "u2-uuid",
+              "unit_title": "Transaction Processing",
+              "title": "Concurrency Control Protocols",
+              "status": "not_started",
+              "is_weak": false,
+              "mastery_score": 0
+            }
+          ],
+          "pending_tasks": [
+            {
+              "id": "task-1-uuid",
+              "title": "Schema Normalization Problem Set",
+              "type": "Assignment",
+              "priority": "High",
+              "due_date": "2026-09-25T18:00:00.000Z",
+              "days_until_due": 1,
+              "is_completed": false
+            }
+          ],
+          "recent_quiz_performance": [
+            {
+              "id": "quiz-1-uuid",
+              "score": 65,
+              "total_questions": 10,
+              "correct_answers": 6,
+              "weak_topics_identified": [
+                "Boyce-Codd Normal Form"
+              ],
+              "created_at": "2026-09-24T18:00:00.000Z"
+            }
+          ],
+          "active_risks": [
+            {
+              "type": "HIGH_EXAM_RISK",
+              "reason": "Exam 'DBMS Mid-sem' is in 6 days, but 3 topics (Boyce-Codd Normal Form, ACID Properties, Concurrency Control Protocols) remain unfinished or weak.",
+              "severity": "high",
+              "subject_id": "c1f6d3a8-4b2e-4a9f-8e2b-1a2c3d4e5f6a",
+              "metadata": {
+                "exam_id": "exam-1-uuid",
+                "days_away": 6,
+                "unfinished_count": 3
+              }
+            },
+            {
+              "type": "DEADLINE_RISK",
+              "reason": "Assignment 'Schema Normalization Problem Set' is pending and due in 24 hours.",
+              "severity": "high",
+              "subject_id": "c1f6d3a8-4b2e-4a9f-8e2b-1a2c3d4e5f6a",
+              "metadata": {
+                "task_id": "task-1-uuid",
+                "hours_remaining": 24
+              }
+            }
+          ]
+        }
+      ],
+      "unassigned_pending_tasks": [
+        {
+          "id": "task-gen-1-uuid",
+          "title": "Renew Library Book Borrowing",
+          "type": "Task",
+          "priority": "Low",
+          "due_date": null,
+          "days_until_due": null,
+          "is_completed": false
+        }
+      ],
+      "global_risks": [
+        {
+          "type": "HIGH_EXAM_RISK",
+          "reason": "Exam 'DBMS Mid-sem' is in 6 days, but 3 topics remain unfinished or weak.",
+          "severity": "high",
+          "subject_id": "c1f6d3a8-4b2e-4a9f-8e2b-1a2c3d4e5f6a"
+        },
+        {
+          "type": "DEADLINE_RISK",
+          "reason": "Assignment 'Schema Normalization Problem Set' is pending and due in 24 hours.",
+          "severity": "high",
+          "subject_id": "c1f6d3a8-4b2e-4a9f-8e2b-1a2c3d4e5f6a"
+        }
+      ],
+      "generated_at": "2026-09-24T18:00:00.000Z"
+    }
+  }
+  ```
+
+

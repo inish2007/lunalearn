@@ -162,6 +162,82 @@ export interface SubjectReadiness {
   risks: AcademicRisk[];
 }
 
+// ==============================================================================
+// Planner Context Contracts (Phase 5 — L7 Adaptive Planner Unified Feed)
+// ==============================================================================
+
+export interface StudyTimeSettings {
+  preferred_focus_time: string;
+  daily_study_target_minutes: number;
+  weekly_study_target_minutes: number;
+  available_hours_per_day: number;
+}
+
+export interface SubjectExamSummary {
+  id: string;
+  title: string;
+  exam_date: string;
+  days_until_exam: number;
+  target_score: number;
+}
+
+export interface TopicSummary {
+  id: string;
+  unit_id: string;
+  unit_title?: string;
+  title: string;
+  status: TopicStatus;
+  is_weak: boolean;
+  mastery_score: number;
+}
+
+export interface TaskSummary {
+  id: string;
+  title: string;
+  type: TaskType;
+  priority: PriorityLevel;
+  due_date: string | null;
+  days_until_due: number | null;
+  is_completed: boolean;
+}
+
+export interface QuizPerformanceSummary {
+  id: string;
+  score: number;
+  total_questions: number;
+  correct_answers: number;
+  weak_topics_identified: string[];
+  created_at: string;
+}
+
+export interface SubjectPlannerContext {
+  subject_id: string;
+  subject_name: string;
+  subject_code: string;
+  subject_color: string;
+  readiness_percentage: number;
+  readiness_breakdown: ReadinessBreakdown;
+  exams: SubjectExamSummary[];
+  weak_and_unfinished_topics: TopicSummary[];
+  pending_tasks: TaskSummary[];
+  recent_quiz_performance: QuizPerformanceSummary[];
+  active_risks: AcademicRisk[];
+}
+
+export interface PlannerContextResponse {
+  student: {
+    id: string;
+    full_name: string | null;
+    course: string;
+    semester: number;
+    study_time_settings: StudyTimeSettings;
+  };
+  subjects: SubjectPlannerContext[];
+  unassigned_pending_tasks: TaskSummary[];
+  global_risks: AcademicRisk[];
+  generated_at: string;
+}
+
 // Database schema representation for Supabase Client generics
 export interface Database {
   public: {

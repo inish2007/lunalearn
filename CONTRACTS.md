@@ -1088,6 +1088,129 @@ Recommended for automated tests, programmatic scripts, and base64 integrations.
 - **405 Method Not Allowed** (`MethodNotAllowed`): Sent `GET` instead of `POST`.
 - **500 Internal Server Error** (`SearchError`): Gemini API connection or embedding failure.
 
+---
+
+## 13. AI/RAG Track — AI Study Assistant (`/api/assistant/chat`)
+
+> **Track Owner**: P3 (AI & RAG Track).  
+> **Status**: Phase 3 Active.  
+> **Core Pipeline**: Student Real Context Gathering (Planner Context) $\to$ Grounded Vector Retrieval (Phase 2 Semantic Search) $\to$ Grounded System Prompting $\to$ Gemini Chat API (`gemini-3.8-flash`) $\to$ Answer with Source Citations and Academic State Summary.
+
+### 13.1 Ask AI Study Assistant
+- **Method**: `POST`
+- **Path**: `/api/assistant/chat`  
+  *(Aliases: `/api/assistant/ask`, `/api/rag/assistant`)*
+- **Auth**: Protected (`Authorization: Bearer <access_token>`)
+- **Headers**:
+  ```http
+  Authorization: Bearer <access_token>
+  Content-Type: application/json
+  ```
+
+#### Request Body (`application/json`)
+| Field | Type | Required | Default | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `message` | String | **Yes** | — | The student's question, prompt, or study request (1 to 4000 characters) |
+| `subject_id` | UUID | No | `null` | Optional scope to a specific subject (auto-resolved from query if omitted) |
+| `material_id` | UUID | No | `null` | Optional scope to a specific uploaded lecture note or document |
+| `conversation_history` | Array | No | `[]` | Recent chat history messages (`{ "role": "user" \| "assistant", "content": string }`, max 20) |
+
+##### Example Request:
+```json
+{
+  "message": "Can you explain Boyce-Codd Normal Form from my Unit 3 notes and give me an example?",
+  "subject_id": "c1f6d3a8-4b2e-4a9f-8e2b-1a2c3d4e5f6a",
+  "conversation_history": [
+    { "role": "user", "content": "Hi! I am preparing for my DBMS exam." },
+    { "role": "assistant", "content": "Hello Aarav! I see your DBMS exam is in 6 days and BCNF is currently marked as a weak area. How can I help you review?" }
+  ]
+}
+```
+
+#### Execution & Grounding Details:
+1. **Academic Context Aggregation**: Automatically gathers the student's real profile, enrolled subjects, upcoming exams with countdowns, weak and unfinished topics, pending assignments, and recent quiz scores via `PlannerContextService`.
+2. **Absence-of-Context Guard**: If the student has zero subjects in their account, the assistant explicitly states that no subjects or study materials have been added yet, guiding them to add a subject or syllabus rather than fabricating answers.
+3. **Phase 2 Vector Retrieval**: Retrieves the top relevant document chunks matching the question from `document_chunks` using `gemini-embedding-001` cosine similarity.
+4. **Grounded System Prompting**: Instructs the Gemini chat model to ground answers about course materials directly in the retrieved chunks, cite source document names and page numbers (e.g. `[Unit 3 · Normalization Lecture Notes, Page 4]`), explain concepts, simplify difficult topics, provide relatable examples, generate practice questions, explain quiz mistakes, and recommend what to study next based on real deadlines and weak topics.
+5. **Model Resolution**: Uses Google Gemini's currently recommended chat model: `gemini-3.8-flash` (configurable via `GEMINI_CHAT_MODEL`, with automatic fallback to `gemini-flash-latest`).
+
+#### Success Response A: Grounded Answer with Retrieved Sources (200 OK)
+```json
+{
+  "success": true,
+  "data": {
+    "answer": "Based on your course materials in [Unit 3 · Normalization Lecture Notes, Page 4]:\n\nBoyce-Codd Normal Form (BCNF) is a stricter version of 3NF. A relation R is in BCNF if and only if for every non-trivial functional dependency X -> Y, X is strictly a superkey of R.\n\n### Example of BCNF Violation [Page 5]:\nConsider relation R(Student, Course, Instructor) where:\n1. (Student, Course) -> Instructor\n2. Instructor -> Course\n\nHere, the determinant `Instructor` is NOT a candidate key or superkey by itself. This causes redundancy whenever an instructor teaches multiple courses.\n\n### Recommendation for your Exam (in 6 days):\nSince BCNF was identified as a weak area in your recent quiz (score: 65%), I recommend completing the 'Schema Decomposition Problem Set' due in 2 days to reinforce multi-attribute key decomposition!",
+    "sources": [
+      {
+        "material_id": "mat-3f89a1-uuid",
+        "material_name": "Unit 3 · Normalization Lecture Notes",
+        "storage_path": "materials/dbms_unit3.pdf",
+        "page_number": 4,
+        "chunk_index": 7,
+        "similarity": 0.892,
+        "preview": "Boyce-Codd Normal Form (BCNF) requires that for every non-trivial functional dependency X -> Y, X must strictly be a superkey of relation R. It resolves anomalies that persist even in 3NF when candidate keys overlap."
+      },
+      {
+        "material_id": "mat-3f89a1-uuid",
+        "material_name": "Unit 3 · Normalization Lecture Notes",
+        "storage_path": "materials/dbms_unit3.pdf",
+        "page_number": 5,
+        "chunk_index": 8,
+        "similarity": 0.824,
+        "preview": "Example of BCNF violation: Consider relation R(Student, Course, Instructor) where (Student, Course) -> Instructor, and Instructor -> Course. Here Instructor is not a superkey, causing redundancy and update anomalies."
+      }
+    ],
+    "academic_context": {
+      "has_academic_profile": true,
+      "student_name": "Aarav Patel",
+      "total_subjects": 1,
+      "active_subject": {
+        "id": "c1f6d3a8-4b2e-4a9f-8e2b-1a2c3d4e5f6a",
+        "name": "Database Management Systems",
+        "code": "CS-401",
+        "readiness_percentage": 59,
+        "days_until_exam": 6,
+        "weak_topics": [
+          "Boyce-Codd Normal Form",
+          "Transactions"
+        ],
+        "pending_tasks_count": 1
+      },
+      "global_risks_count": 2
+    },
+    "model": "gemini-3.8-flash"
+  },
+  "message": "Assistant response generated successfully"
+}
+```
+
+#### Success Response B: When No Academic Context or Subjects Exist (200 OK)
+Returned when a brand-new student account asks questions before configuring any coursework:
+```json
+{
+  "success": true,
+  "data": {
+    "answer": "You haven't added any subjects or uploaded study materials to LunaLearn yet. Please add your first subject or import your syllabus/notes so I can explain your course concepts, generate customized practice questions, and recommend what to study next!",
+    "sources": [],
+    "academic_context": {
+      "has_academic_profile": false,
+      "student_name": "New Student",
+      "total_subjects": 0,
+      "global_risks_count": 0
+    },
+    "model": "gemini-3.8-flash"
+  },
+  "message": "Assistant response generated successfully"
+}
+```
+
+#### Error Responses
+- **400 Bad Request** (`ValidationError`): Missing or empty `message` string, or invalid UUID format for `subject_id`/`material_id`.
+- **401 Unauthorized** (`Unauthorized`): Missing or invalid Bearer token.
+- **405 Method Not Allowed** (`MethodNotAllowed`): Sent `GET` instead of `POST`.
+- **500 Internal Server Error** (`AssistantError`): Upstream server or unrecoverable AI assistant failure.
+
+
 
 
 

@@ -1,134 +1,243 @@
 import { SupabaseClient } from '@supabase/supabase-js';
-import { supabase, supabaseAdmin } from '../lib/supabase.js';
+import { supabase, supabaseAdmin, isLiveSupabaseConfigured } from '../lib/supabase.js';
 import { createScopedClient } from '../lib/scoped-client.js';
+import { LocalDevStore } from '../lib/local-store.js';
 import { AuthResult, SignInInput, SignUpInput } from '../types/auth.js';
 import { Database, Profile } from '../types/database.js';
 
 export class AuthService {
   /**
    * Registers a new student account and automatically synchronizes the matching profiles row.
+   * Seamlessly uses LocalDevStore when Supabase is unconfigured or offline.
    */
   static async signUp(input: SignUpInput): Promise<AuthResult> {
     const { email, password, full_name, course, semester, avatar_url } = input;
 
-    // 1. Create auth user in Supabase Auth
-    const { data: authData, error: authError } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: {
-          full_name: full_name || email.split('@')[0],
-          course: course || 'B.Tech',
-          semester: semester || 4,
-          avatar_url
+    // Use LocalDevStore directly if live Supabase is not configured
+    if (!isLiveSupabaseConfigured) {
+      const local = await LocalDevStore.getInstance().signUp({
+        email,
+        password,
+        full_name,
+        course,
+        semester,
+        avatar_url
+      });
+      return {
+        user: {
+          id: local.user.id,
+          email: local.user.email || email,
+          created_at: local.user.created_at,
+          role: local.user.role
+        },
+        session: {
+          access_token: local.session.access_token,
+          refresh_token: local.session.refresh_token,
+          expires_in: local.session.expires_in,
+          token_type: local.session.token_type
+        },
+        profile: local.profile
+      };
+    }
+
+    try {
+      // 1. Create auth user in Supabase Auth
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            full_name: full_name || email.split('@')[0],
+            course: course || 'B.Tech',
+            semester: semester || 4,
+            avatar_url
+          }
         }
+      });
+
+      if (authError || !authData.user) {
+        throw new Error(authError?.message || 'Failed to register account');
       }
-    });
 
-    if (authError || !authData.user) {
-      throw new Error(authError?.message || 'Failed to register account');
-    }
+      const user = authData.user;
+      const session = authData.session;
 
-    const user = authData.user;
-    const session = authData.session;
-
-    // 2. Ensure matching profile exists in profiles table
-    // The database trigger handles this, but we explicitly upsert with supabaseAdmin
-    // to guarantee profile completeness immediately upon signup.
-    const profilePayload: Database['public']['Tables']['profiles']['Insert'] = {
-      id: user.id,
-      email: user.email || email,
-      full_name: full_name || email.split('@')[0],
-      avatar_url: avatar_url || null,
-      course: course || 'B.Tech',
-      semester: semester || 4,
-      xp: 0,
-      level: 1,
-      preferred_focus_time: 'Evenings'
-    };
-
-    const { data: profile, error: profileError } = await supabaseAdmin
-      .from('profiles')
-      .upsert(profilePayload as any)
-      .select('*')
-      .single();
-
-    if (profileError && !profile) {
-      console.warn(`Profile upsert notice: ${profileError.message}`);
-    }
-
-    return {
-      user: {
+      // 2. Ensure matching profile exists in profiles table
+      const profilePayload: Database['public']['Tables']['profiles']['Insert'] = {
         id: user.id,
         email: user.email || email,
-        created_at: user.created_at,
-        role: user.role
-      },
-      session: session
-        ? {
-            access_token: session.access_token,
-            refresh_token: session.refresh_token,
-            expires_in: session.expires_in,
-            token_type: session.token_type
-          }
-        : null,
-      profile: profile || null
-    };
+        full_name: full_name || email.split('@')[0],
+        avatar_url: avatar_url || null,
+        course: course || 'B.Tech',
+        semester: semester || 4,
+        xp: 0,
+        level: 1,
+        preferred_focus_time: 'Evenings'
+      };
+
+      const { data: profile, error: profileError } = await supabaseAdmin
+        .from('profiles')
+        .upsert(profilePayload as any)
+        .select('*')
+        .single();
+
+      if (profileError && !profile) {
+        console.warn(`Profile upsert notice: ${profileError.message}`);
+      }
+
+      return {
+        user: {
+          id: user.id,
+          email: user.email || email,
+          created_at: user.created_at,
+          role: user.role
+        },
+        session: session
+          ? {
+              access_token: session.access_token,
+              refresh_token: session.refresh_token,
+              expires_in: session.expires_in,
+              token_type: session.token_type
+            }
+          : null,
+        profile: profile || null
+      };
+    } catch (err: unknown) {
+      const msg = (err as Error).message || '';
+      const isProd = process.env.NODE_ENV === 'production';
+
+      if (!isProd && (msg.includes('fetch failed') || msg.includes('ENOTFOUND'))) {
+        console.warn(`⚠️ Live Supabase unreachable (${msg}). Falling back to local account registration.`);
+        const local = await LocalDevStore.getInstance().signUp({
+          email,
+          password,
+          full_name,
+          course,
+          semester,
+          avatar_url
+        });
+        return {
+          user: {
+            id: local.user.id,
+            email: local.user.email || email,
+            created_at: local.user.created_at,
+            role: local.user.role
+          },
+          session: {
+            access_token: local.session.access_token,
+            refresh_token: local.session.refresh_token,
+            expires_in: local.session.expires_in,
+            token_type: local.session.token_type
+          },
+          profile: local.profile
+        };
+      }
+      throw err;
+    }
   }
 
   /**
-   * Authenticates user credentials with Supabase Auth and returns the session & profile.
+   * Authenticates user credentials with Supabase Auth (or LocalDevStore) and returns session & profile.
    */
   static async signIn(input: SignInInput): Promise<AuthResult> {
     const { email, password } = input;
 
-    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-      email,
-      password
-    });
-
-    if (authError || !authData.user || !authData.session) {
-      throw new Error(authError?.message || 'Invalid email or password');
+    if (!isLiveSupabaseConfigured) {
+      const local = await LocalDevStore.getInstance().signIn({ email, password });
+      return {
+        user: {
+          id: local.user.id,
+          email: local.user.email || email,
+          created_at: local.user.created_at,
+          role: local.user.role
+        },
+        session: {
+          access_token: local.session.access_token,
+          refresh_token: local.session.refresh_token,
+          expires_in: local.session.expires_in,
+          token_type: local.session.token_type
+        },
+        profile: local.profile
+      };
     }
 
-    const user = authData.user;
-    const session = authData.session;
+    try {
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+        email,
+        password
+      });
 
-    // Retrieve profile using the user-scoped client to verify RLS readability
-    const scopedDb = createScopedClient(session.access_token);
-    const { data: profile } = await scopedDb
-      .from('profiles')
-      .select('*')
-      .eq('id', user.id)
-      .maybeSingle();
+      if (authError || !authData.user || !authData.session) {
+        throw new Error(authError?.message || 'Invalid email or password');
+      }
 
-    return {
-      user: {
-        id: user.id,
-        email: user.email || email,
-        created_at: user.created_at,
-        role: user.role
-      },
-      session: {
-        access_token: session.access_token,
-        refresh_token: session.refresh_token,
-        expires_in: session.expires_in,
-        token_type: session.token_type
-      },
-      profile: profile || null
-    };
+      const user = authData.user;
+      const session = authData.session;
+
+      // Retrieve profile using the user-scoped client to verify RLS readability
+      const scopedDb = createScopedClient(session.access_token);
+      const { data: profile } = await scopedDb
+        .from('profiles')
+        .select('*')
+        .eq('id', user.id)
+        .maybeSingle();
+
+      return {
+        user: {
+          id: user.id,
+          email: user.email || email,
+          created_at: user.created_at,
+          role: user.role
+        },
+        session: {
+          access_token: session.access_token,
+          refresh_token: session.refresh_token,
+          expires_in: session.expires_in,
+          token_type: session.token_type
+        },
+        profile: profile || null
+      };
+    } catch (err: unknown) {
+      const msg = (err as Error).message || '';
+      const isProd = process.env.NODE_ENV === 'production';
+      if (!isProd && (msg.includes('fetch failed') || msg.includes('ENOTFOUND'))) {
+        console.warn(`⚠️ Live Supabase unreachable (${msg}). Falling back to local login.`);
+        const local = await LocalDevStore.getInstance().signIn({ email, password });
+        return {
+          user: {
+            id: local.user.id,
+            email: local.user.email || email,
+            created_at: local.user.created_at,
+            role: local.user.role
+          },
+          session: {
+            access_token: local.session.access_token,
+            refresh_token: local.session.refresh_token,
+            expires_in: local.session.expires_in,
+            token_type: local.session.token_type
+          },
+          profile: local.profile
+        };
+      }
+      throw err;
+    }
   }
 
   /**
    * Signs the user out and invalidates the session.
    */
   static async signOut(accessToken: string): Promise<void> {
+    const isLocalToken = accessToken.startsWith('local-dev-jwt-');
+    if (!isLiveSupabaseConfigured || isLocalToken) {
+      return;
+    }
     const scopedClient = createScopedClient(accessToken);
     const { error } = await scopedClient.auth.signOut();
     if (error) {
       throw new Error(error.message);
     }
   }
+
 
   /**
    * Retrieves the authenticated user's profile using their scoped client.
@@ -145,5 +254,61 @@ export class AuthService {
     }
 
     return data;
+  }
+
+  /**
+   * Refreshes an expired access token using a valid refresh token.
+   */
+  static async refreshSession(refreshToken: string): Promise<AuthResult> {
+    if (!refreshToken) {
+      throw new Error('Missing refresh token');
+    }
+
+    if (!isLiveSupabaseConfigured) {
+      const local = await LocalDevStore.getInstance().refreshSession(refreshToken);
+      return {
+        user: {
+          id: local.user.id,
+          email: local.user.email || '',
+          created_at: local.user.created_at,
+          role: local.user.role
+        },
+        session: {
+          access_token: local.session.access_token,
+          refresh_token: local.session.refresh_token,
+          expires_in: local.session.expires_in,
+          token_type: local.session.token_type
+        },
+        profile: local.profile
+      };
+    }
+
+    const { data, error } = await supabase.auth.refreshSession({ refresh_token: refreshToken });
+    if (error || !data.session || !data.user) {
+      throw new Error(error?.message || 'Invalid or expired refresh token');
+    }
+
+    const scopedDb = createScopedClient(data.session.access_token);
+    const { data: profile } = await scopedDb
+      .from('profiles')
+      .select('*')
+      .eq('id', data.user.id)
+      .maybeSingle();
+
+    return {
+      user: {
+        id: data.user.id,
+        email: data.user.email || '',
+        created_at: data.user.created_at,
+        role: data.user.role
+      },
+      session: {
+        access_token: data.session.access_token,
+        refresh_token: data.session.refresh_token,
+        expires_in: data.session.expires_in,
+        token_type: data.session.token_type
+      },
+      profile: (profile as unknown as Profile) || null
+    };
   }
 }

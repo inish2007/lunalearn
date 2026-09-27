@@ -7,26 +7,55 @@ import {
   CreateTopicSchema, UpdateTopicSchema,
   CreateTaskSchema, UpdateTaskSchema,
   CreateExamSchema, UpdateExamSchema,
-  CreateMaterialSchema, UpdateMaterialSchema,
-  ApiResponse, ApiListResponse, ApiErrorResponse
+  CreateMaterialSchema, UpdateMaterialSchema
 } from '../types/domain.js';
 
+import { AppError } from '../types/errors.js';
+import { sendStandardSuccess, sendStandardError } from '../lib/response.js';
+
 export function sendSuccess<T>(res: http.ServerResponse, data: T, statusCode = 200, message?: string) {
-  const payload: ApiResponse<T> = { success: true, data, message };
-  res.writeHead(statusCode, { 'Content-Type': 'application/json' });
-  res.end(JSON.stringify(payload));
+  const headers: Record<string, string> = {};
+  if (data && typeof data === 'object' && 'updated_at' in (data as any)) {
+    const updatedAt = (data as any).updated_at;
+    if (updatedAt) {
+      headers['ETag'] = `"${updatedAt}"`;
+    }
+  }
+  sendStandardSuccess(res, data, statusCode, { message, headers });
 }
 
 export function sendList<T>(res: http.ServerResponse, data: T[], count: number, statusCode = 200, message?: string) {
-  const payload: ApiListResponse<T> = { success: true, data, count, message };
-  res.writeHead(statusCode, { 'Content-Type': 'application/json' });
-  res.end(JSON.stringify(payload));
+  sendStandardSuccess(res, data, statusCode, { count, message });
 }
 
 export function sendError(res: http.ServerResponse, error: string, message: string, statusCode = 400, issues?: { field: string; message: string }[]) {
-  const payload: ApiErrorResponse = { success: false, error, message, issues };
-  res.writeHead(statusCode, { 'Content-Type': 'application/json' });
-  res.end(JSON.stringify(payload));
+  let appError: AppError;
+  const isConflict = statusCode === 409 || error === 'Conflict';
+  const isNotFound = statusCode === 404 || error === 'NotFound';
+  const isForbidden = statusCode === 403 || error === 'Forbidden';
+  const isUnauthorized = statusCode === 401 || error === 'Unauthorized';
+  const isPayloadTooLarge = statusCode === 413 || error === 'PayloadTooLarge';
+  const isUnsupportedMediaType = statusCode === 415 || error === 'UnsupportedMediaType';
+
+  if (isConflict) {
+    appError = AppError.conflict(message);
+  } else if (isNotFound) {
+    appError = AppError.notFound(message);
+  } else if (isForbidden) {
+    appError = AppError.forbidden(message);
+  } else if (isUnauthorized) {
+    appError = AppError.unauthorized(message);
+  } else if (isPayloadTooLarge) {
+    appError = AppError.payloadTooLarge(message);
+  } else if (isUnsupportedMediaType) {
+    appError = AppError.unsupportedMediaType(message);
+  } else if (statusCode >= 500) {
+    appError = AppError.internal(message);
+  } else {
+    appError = AppError.validation(message, issues);
+  }
+
+  sendStandardError(res, appError, undefined, { statusCodeOverride: statusCode });
 }
 
 // Regex route matcher helper
@@ -48,6 +77,30 @@ export function matchRoute(pathname: string, resource: string): { matches: boole
 // Helper to access scoped table builder cleanly
 function table(db: any, tableName: string) {
   return db.from(tableName);
+}
+
+/**
+ * Checks If-Match header against the resource's updated_at timestamp.
+ * Returns false and sends 409 Conflict if there is a version mismatch.
+ */
+async function checkOptimisticConcurrency(
+  req: http.IncomingMessage,
+  res: http.ServerResponse,
+  db: any,
+  tableName: string,
+  id: string
+): Promise<boolean> {
+  const ifMatch = req.headers['if-match'];
+  if (!ifMatch || ifMatch === '*') return true;
+  const { data: current } = await table(db, tableName).select('updated_at').eq('id', id).maybeSingle();
+  if (current?.updated_at) {
+    const cleanMatch = ifMatch.replace(/^"|"$/g, '');
+    if (cleanMatch !== current.updated_at) {
+      sendError(res, 'Conflict', 'Resource version mismatch: stale update prevented by optimistic concurrency control.', 409);
+      return false;
+    }
+  }
+  return true;
 }
 
 // ==============================================================================
@@ -79,7 +132,12 @@ export async function handleDomainRoutes(req: http.IncomingMessage, res: http.Se
 
       // POST /api/subjects
       if (!id && method === 'POST') {
-        const body = await parseJsonBody(req);
+        let body: unknown;
+        try {
+          body = await parseJsonBody(req);
+        } catch (err: unknown) {
+          return sendError(res, 'ValidationError', err instanceof Error ? err.message : 'Invalid JSON body', 400);
+        }
         const parsed = CreateSubjectSchema.safeParse(body);
         if (!parsed.success) {
           return sendError(res, 'ValidationError', 'Invalid subject input', 400, parsed.error.issues.map(i => ({ field: i.path.join('.'), message: i.message })));
@@ -112,11 +170,19 @@ export async function handleDomainRoutes(req: http.IncomingMessage, res: http.Se
 
       // PATCH /api/subjects/:id
       if (id && method === 'PATCH') {
-        const body = await parseJsonBody(req);
+        let body: unknown;
+        try {
+          body = await parseJsonBody(req);
+        } catch (err: unknown) {
+          return sendError(res, 'ValidationError', err instanceof Error ? err.message : 'Invalid JSON body', 400);
+        }
         const parsed = UpdateSubjectSchema.safeParse(body);
         if (!parsed.success) {
           return sendError(res, 'ValidationError', 'Invalid subject update payload', 400, parsed.error.issues.map(i => ({ field: i.path.join('.'), message: i.message })));
         }
+
+        const allowed = await checkOptimisticConcurrency(req, res, ctx.db, 'subjects', id);
+        if (!allowed) return;
 
         const { data, error } = await table(ctx.db, 'subjects')
           .update(parsed.data)
@@ -130,6 +196,13 @@ export async function handleDomainRoutes(req: http.IncomingMessage, res: http.Se
 
       // DELETE /api/subjects/:id
       if (id && method === 'DELETE') {
+        const { data: existing } = await table(ctx.db, 'subjects')
+          .select('id')
+          .eq('id', id)
+          .maybeSingle();
+
+        if (!existing) return sendError(res, 'NotFound', 'Subject not found or unauthorized', 404);
+
         const { error } = await table(ctx.db, 'subjects')
           .delete()
           .eq('id', id);
@@ -166,10 +239,25 @@ export async function handleDomainRoutes(req: http.IncomingMessage, res: http.Se
 
       // POST /api/units
       if (!id && method === 'POST') {
-        const body = await parseJsonBody(req);
+        let body: unknown;
+        try {
+          body = await parseJsonBody(req);
+        } catch (err: unknown) {
+          return sendError(res, 'ValidationError', err instanceof Error ? err.message : 'Invalid JSON body', 400);
+        }
         const parsed = CreateUnitSchema.safeParse(body);
         if (!parsed.success) {
           return sendError(res, 'ValidationError', 'Invalid unit input', 400, parsed.error.issues.map(i => ({ field: i.path.join('.'), message: i.message })));
+        }
+
+        // Verify parent subject belongs to caller
+        const { data: parentSubject } = await table(ctx.db, 'subjects')
+          .select('id')
+          .eq('id', parsed.data.subject_id)
+          .maybeSingle();
+
+        if (!parentSubject) {
+          return sendError(res, 'Forbidden', 'Subject does not exist or does not belong to you', 403);
         }
 
         const { data, error } = await table(ctx.db, 'units')
@@ -198,11 +286,19 @@ export async function handleDomainRoutes(req: http.IncomingMessage, res: http.Se
 
       // PATCH /api/units/:id
       if (id && method === 'PATCH') {
-        const body = await parseJsonBody(req);
+        let body: unknown;
+        try {
+          body = await parseJsonBody(req);
+        } catch (err: unknown) {
+          return sendError(res, 'ValidationError', err instanceof Error ? err.message : 'Invalid JSON body', 400);
+        }
         const parsed = UpdateUnitSchema.safeParse(body);
         if (!parsed.success) {
           return sendError(res, 'ValidationError', 'Invalid unit update payload', 400, parsed.error.issues.map(i => ({ field: i.path.join('.'), message: i.message })));
         }
+
+        const allowed = await checkOptimisticConcurrency(req, res, ctx.db, 'units', id);
+        if (!allowed) return;
 
         const { data, error } = await table(ctx.db, 'units')
           .update(parsed.data)
@@ -216,6 +312,13 @@ export async function handleDomainRoutes(req: http.IncomingMessage, res: http.Se
 
       // DELETE /api/units/:id
       if (id && method === 'DELETE') {
+        const { data: existing } = await table(ctx.db, 'units')
+          .select('id')
+          .eq('id', id)
+          .maybeSingle();
+
+        if (!existing) return sendError(res, 'NotFound', 'Unit not found or unauthorized', 404);
+
         const { error } = await table(ctx.db, 'units')
           .delete()
           .eq('id', id);
@@ -252,10 +355,25 @@ export async function handleDomainRoutes(req: http.IncomingMessage, res: http.Se
 
       // POST /api/topics
       if (!id && method === 'POST') {
-        const body = await parseJsonBody(req);
+        let body: unknown;
+        try {
+          body = await parseJsonBody(req);
+        } catch (err: unknown) {
+          return sendError(res, 'ValidationError', err instanceof Error ? err.message : 'Invalid JSON body', 400);
+        }
         const parsed = CreateTopicSchema.safeParse(body);
         if (!parsed.success) {
           return sendError(res, 'ValidationError', 'Invalid topic input', 400, parsed.error.issues.map(i => ({ field: i.path.join('.'), message: i.message })));
+        }
+
+        // Verify parent unit belongs to caller
+        const { data: parentUnit } = await table(ctx.db, 'units')
+          .select('id')
+          .eq('id', parsed.data.unit_id)
+          .maybeSingle();
+
+        if (!parentUnit) {
+          return sendError(res, 'Forbidden', 'Unit does not exist or does not belong to you', 403);
         }
 
         const { data, error } = await table(ctx.db, 'topics')
@@ -286,11 +404,19 @@ export async function handleDomainRoutes(req: http.IncomingMessage, res: http.Se
 
       // PATCH /api/topics/:id
       if (id && method === 'PATCH') {
-        const body = await parseJsonBody(req);
+        let body: unknown;
+        try {
+          body = await parseJsonBody(req);
+        } catch (err: unknown) {
+          return sendError(res, 'ValidationError', err instanceof Error ? err.message : 'Invalid JSON body', 400);
+        }
         const parsed = UpdateTopicSchema.safeParse(body);
         if (!parsed.success) {
           return sendError(res, 'ValidationError', 'Invalid topic update payload', 400, parsed.error.issues.map(i => ({ field: i.path.join('.'), message: i.message })));
         }
+
+        const allowed = await checkOptimisticConcurrency(req, res, ctx.db, 'topics', id);
+        if (!allowed) return;
 
         const { data, error } = await table(ctx.db, 'topics')
           .update(parsed.data)
@@ -304,6 +430,13 @@ export async function handleDomainRoutes(req: http.IncomingMessage, res: http.Se
 
       // DELETE /api/topics/:id
       if (id && method === 'DELETE') {
+        const { data: existing } = await table(ctx.db, 'topics')
+          .select('id')
+          .eq('id', id)
+          .maybeSingle();
+
+        if (!existing) return sendError(res, 'NotFound', 'Topic not found or unauthorized', 404);
+
         const { error } = await table(ctx.db, 'topics')
           .delete()
           .eq('id', id);
@@ -348,10 +481,26 @@ export async function handleDomainRoutes(req: http.IncomingMessage, res: http.Se
 
       // POST /api/tasks
       if (!id && method === 'POST') {
-        const body = await parseJsonBody(req);
+        let body: unknown;
+        try {
+          body = await parseJsonBody(req);
+        } catch (err: unknown) {
+          return sendError(res, 'ValidationError', err instanceof Error ? err.message : 'Invalid JSON body', 400);
+        }
         const parsed = CreateTaskSchema.safeParse(body);
         if (!parsed.success) {
           return sendError(res, 'ValidationError', 'Invalid task input', 400, parsed.error.issues.map(i => ({ field: i.path.join('.'), message: i.message })));
+        }
+
+        if (parsed.data.subject_id) {
+          const { data: parentSubject } = await table(ctx.db, 'subjects')
+            .select('id')
+            .eq('id', parsed.data.subject_id)
+            .maybeSingle();
+
+          if (!parentSubject) {
+            return sendError(res, 'Forbidden', 'Subject does not exist or does not belong to you', 403);
+          }
         }
 
         const { data, error } = await table(ctx.db, 'tasks')
@@ -384,11 +533,19 @@ export async function handleDomainRoutes(req: http.IncomingMessage, res: http.Se
 
       // PATCH /api/tasks/:id
       if (id && method === 'PATCH') {
-        const body = await parseJsonBody(req);
+        let body: unknown;
+        try {
+          body = await parseJsonBody(req);
+        } catch (err: unknown) {
+          return sendError(res, 'ValidationError', err instanceof Error ? err.message : 'Invalid JSON body', 400);
+        }
         const parsed = UpdateTaskSchema.safeParse(body);
         if (!parsed.success) {
           return sendError(res, 'ValidationError', 'Invalid task update payload', 400, parsed.error.issues.map(i => ({ field: i.path.join('.'), message: i.message })));
         }
+
+        const allowed = await checkOptimisticConcurrency(req, res, ctx.db, 'tasks', id);
+        if (!allowed) return;
 
         const updatePayload: Record<string, unknown> = { ...parsed.data };
         if (parsed.data.is_completed === true) {
@@ -409,6 +566,13 @@ export async function handleDomainRoutes(req: http.IncomingMessage, res: http.Se
 
       // DELETE /api/tasks/:id
       if (id && method === 'DELETE') {
+        const { data: existing } = await table(ctx.db, 'tasks')
+          .select('id')
+          .eq('id', id)
+          .maybeSingle();
+
+        if (!existing) return sendError(res, 'NotFound', 'Task not found or unauthorized', 404);
+
         const { error } = await table(ctx.db, 'tasks')
           .delete()
           .eq('id', id);
@@ -448,10 +612,24 @@ export async function handleDomainRoutes(req: http.IncomingMessage, res: http.Se
 
       // POST /api/exams
       if (!id && method === 'POST') {
-        const body = await parseJsonBody(req);
+        let body: unknown;
+        try {
+          body = await parseJsonBody(req);
+        } catch (err: unknown) {
+          return sendError(res, 'ValidationError', err instanceof Error ? err.message : 'Invalid JSON body', 400);
+        }
         const parsed = CreateExamSchema.safeParse(body);
         if (!parsed.success) {
           return sendError(res, 'ValidationError', 'Invalid exam input', 400, parsed.error.issues.map(i => ({ field: i.path.join('.'), message: i.message })));
+        }
+
+        const { data: parentSubject } = await table(ctx.db, 'subjects')
+          .select('id')
+          .eq('id', parsed.data.subject_id)
+          .maybeSingle();
+
+        if (!parentSubject) {
+          return sendError(res, 'Forbidden', 'Subject does not exist or does not belong to you', 403);
         }
 
         const { data, error } = await table(ctx.db, 'exams')
@@ -482,11 +660,19 @@ export async function handleDomainRoutes(req: http.IncomingMessage, res: http.Se
 
       // PATCH /api/exams/:id
       if (id && method === 'PATCH') {
-        const body = await parseJsonBody(req);
+        let body: unknown;
+        try {
+          body = await parseJsonBody(req);
+        } catch (err: unknown) {
+          return sendError(res, 'ValidationError', err instanceof Error ? err.message : 'Invalid JSON body', 400);
+        }
         const parsed = UpdateExamSchema.safeParse(body);
         if (!parsed.success) {
           return sendError(res, 'ValidationError', 'Invalid exam update payload', 400, parsed.error.issues.map(i => ({ field: i.path.join('.'), message: i.message })));
         }
+
+        const allowed = await checkOptimisticConcurrency(req, res, ctx.db, 'exams', id);
+        if (!allowed) return;
 
         const { data, error } = await table(ctx.db, 'exams')
           .update(parsed.data)
@@ -500,6 +686,13 @@ export async function handleDomainRoutes(req: http.IncomingMessage, res: http.Se
 
       // DELETE /api/exams/:id
       if (id && method === 'DELETE') {
+        const { data: existing } = await table(ctx.db, 'exams')
+          .select('id')
+          .eq('id', id)
+          .maybeSingle();
+
+        if (!existing) return sendError(res, 'NotFound', 'Exam not found or unauthorized', 404);
+
         const { error } = await table(ctx.db, 'exams')
           .delete()
           .eq('id', id);
@@ -543,10 +736,35 @@ export async function handleDomainRoutes(req: http.IncomingMessage, res: http.Se
 
       // POST /api/materials
       if (!id && method === 'POST') {
-        const body = await parseJsonBody(req);
+        let body: unknown;
+        try {
+          body = await parseJsonBody(req);
+        } catch (err: unknown) {
+          return sendError(res, 'ValidationError', err instanceof Error ? err.message : 'Invalid JSON body', 400);
+        }
         const parsed = CreateMaterialSchema.safeParse(body);
         if (!parsed.success) {
           return sendError(res, 'ValidationError', 'Invalid material input', 400, parsed.error.issues.map(i => ({ field: i.path.join('.'), message: i.message })));
+        }
+
+        const { data: parentSubject } = await table(ctx.db, 'subjects')
+          .select('id')
+          .eq('id', parsed.data.subject_id)
+          .maybeSingle();
+
+        if (!parentSubject) {
+          return sendError(res, 'Forbidden', 'Subject does not exist or does not belong to you', 403);
+        }
+
+        if (parsed.data.unit_id) {
+          const { data: parentUnit } = await table(ctx.db, 'units')
+            .select('id')
+            .eq('id', parsed.data.unit_id)
+            .maybeSingle();
+
+          if (!parentUnit) {
+            return sendError(res, 'Forbidden', 'Unit does not exist or does not belong to you', 403);
+          }
         }
 
         const { data, error } = await table(ctx.db, 'materials')
@@ -580,11 +798,19 @@ export async function handleDomainRoutes(req: http.IncomingMessage, res: http.Se
 
       // PATCH /api/materials/:id
       if (id && method === 'PATCH') {
-        const body = await parseJsonBody(req);
+        let body: unknown;
+        try {
+          body = await parseJsonBody(req);
+        } catch (err: unknown) {
+          return sendError(res, 'ValidationError', err instanceof Error ? err.message : 'Invalid JSON body', 400);
+        }
         const parsed = UpdateMaterialSchema.safeParse(body);
         if (!parsed.success) {
           return sendError(res, 'ValidationError', 'Invalid material update payload', 400, parsed.error.issues.map(i => ({ field: i.path.join('.'), message: i.message })));
         }
+
+        const allowed = await checkOptimisticConcurrency(req, res, ctx.db, 'materials', id);
+        if (!allowed) return;
 
         const { data, error } = await table(ctx.db, 'materials')
           .update(parsed.data)
@@ -598,6 +824,13 @@ export async function handleDomainRoutes(req: http.IncomingMessage, res: http.Se
 
       // DELETE /api/materials/:id
       if (id && method === 'DELETE') {
+        const { data: existing } = await table(ctx.db, 'materials')
+          .select('id')
+          .eq('id', id)
+          .maybeSingle();
+
+        if (!existing) return sendError(res, 'NotFound', 'Material not found or unauthorized', 404);
+
         const { error } = await table(ctx.db, 'materials')
           .delete()
           .eq('id', id);

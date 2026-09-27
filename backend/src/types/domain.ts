@@ -92,8 +92,14 @@ export type UpdateTopicInput = z.infer<typeof UpdateTopicSchema>;
 // Task Schemas
 // ==============================================================================
 
-export const TaskTypeEnum = z.enum(['Assignment', 'Task', 'Revision']);
-export const PriorityLevelEnum = z.enum(['High', 'Medium', 'Low']);
+export const TaskTypeEnum = z.preprocess(
+  v => typeof v === 'string' ? v.charAt(0).toUpperCase() + v.slice(1).toLowerCase() : v,
+  z.enum(['Assignment', 'Task', 'Revision'])
+);
+export const PriorityLevelEnum = z.preprocess(
+  v => typeof v === 'string' ? v.charAt(0).toUpperCase() + v.slice(1).toLowerCase() : v,
+  z.enum(['High', 'Medium', 'Low'])
+);
 
 export const CreateTaskSchema = z.object({
   title: z.string().min(1, { message: 'Task title is required' }).max(250),
@@ -142,7 +148,10 @@ export type UpdateExamInput = z.infer<typeof UpdateExamSchema>;
 // Material Metadata Schemas (File storage handled by AI/RAG track)
 // ==============================================================================
 
-export const MaterialTypeEnum = z.enum(['PDF', 'Notes', 'Slides']);
+export const MaterialTypeEnum = z.preprocess(
+  v => typeof v === 'string' ? (v.toUpperCase() === 'PDF' ? 'PDF' : v.charAt(0).toUpperCase() + v.slice(1).toLowerCase()) : v,
+  z.enum(['PDF', 'Notes', 'Slides'])
+);
 
 export const CreateMaterialSchema = z.object({
   subject_id: z.string().uuid({ message: 'Valid subject_id UUID is required' }),

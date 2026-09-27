@@ -59,4 +59,6 @@ export interface AssistantChatResponseData {
   sources: AssistantSourceChunk[];
   academic_context: AssistantAcademicContextSummary;
   model: string;
+  is_fallback?: boolean;
+  notice?: string;
 }

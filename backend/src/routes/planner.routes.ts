@@ -1,6 +1,7 @@
 import http from 'http';
 import { requireAuth } from '../middleware/auth.middleware.js';
 import { PlannerContextService } from '../services/planner-context.service.js';
+import { AppError } from '../types/errors.js';
 import { sendSuccess, sendError } from './domain.routes.js';
 
 export async function handlePlannerRoutes(req: http.IncomingMessage, res: http.ServerResponse): Promise<boolean> {
@@ -28,11 +29,39 @@ export async function handlePlannerRoutes(req: http.IncomingMessage, res: http.S
     const handler = requireAuth(async (_req, res, ctx) => {
       if (method === 'GET') {
         try {
+          if (subjectId) {
+            // Verify subject exists and belongs to user
+            const { data: sub } = await (ctx.db as any)
+              .from('subjects')
+              .select('id')
+              .eq('id', subjectId)
+              .maybeSingle();
+
+            if (!sub) {
+              return sendError(res, 'NotFound', 'Subject not found or inaccessible', 404);
+            }
+          }
+
           const context = await PlannerContextService.getPlannerContext(ctx.db, ctx.user.id, subjectId);
+
+          // If query specifies strict validation or generating a schedule
+          const strictCheck = url.searchParams.get('strict') === 'true';
+          if (strictCheck && context.subjects.length === 0) {
+            return sendError(
+              res,
+              'INSUFFICIENT_DATA',
+              'Student has no registered subjects or syllabus topics to generate a study schedule.',
+              422
+            );
+          }
+
           return sendSuccess(res, context);
         } catch (err: unknown) {
+          if (err instanceof AppError) {
+            return sendError(res, err.code, err.message, err.statusCode);
+          }
           const msg = err instanceof Error ? err.message : 'Error generating adaptive planner context';
-          return sendError(res, 'PlannerContextError', msg, 500);
+          return sendError(res, 'PLANNER_FAILURE', msg, 500);
         }
       }
       return sendError(res, 'MethodNotAllowed', `Method ${method} not supported on ${pathname}`, 405);

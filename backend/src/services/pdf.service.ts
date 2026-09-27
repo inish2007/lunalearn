@@ -1,33 +1,52 @@
 import { PDFParse } from 'pdf-parse';
 import { ExtractedPdf, ExtractedPage } from '../types/rag.js';
+import { AppError } from '../types/errors.js';
 
 export class PdfService {
+  public static readonly MAX_PAGE_COUNT = 50;
+  public static readonly MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10MB
+
   /**
    * Validates whether a buffer starts with standard PDF magic bytes (%PDF-).
+   * 0x25 0x50 0x44 0x46 0x2D in ASCII.
    */
   public static isPdf(buffer: Buffer): boolean {
     if (!buffer || buffer.length < 5) return false;
-    // %PDF is 0x25 0x50 0x44 0x46 in ASCII
     return (
-      buffer[0] === 0x25 &&
-      buffer[1] === 0x50 &&
-      buffer[2] === 0x44 &&
-      buffer[3] === 0x46
+      buffer[0] === 0x25 && // %
+      buffer[1] === 0x50 && // P
+      buffer[2] === 0x44 && // D
+      buffer[3] === 0x46 && // F
+      buffer[4] === 0x2d    // -
     );
   }
 
   /**
-   * Extracts text, page count, and per-page content from a PDF Buffer.
+   * Extracts text, page count, and per-page content from a PDF Buffer with strict security validation.
    */
   public static async extractText(buffer: Buffer): Promise<ExtractedPdf> {
+    if (buffer.length > this.MAX_FILE_SIZE_BYTES) {
+      throw AppError.payloadTooLarge(
+        `PDF file size (${Math.round(buffer.length / (1024 * 1024))}MB) exceeds maximum limit of 10MB.`
+      );
+    }
+
     if (!this.isPdf(buffer)) {
-      throw new Error('Invalid file format. The provided file does not appear to be a valid PDF document.');
+      throw AppError.unsupportedMediaType(
+        'Invalid file format. The provided file does not have a valid %PDF- magic header signature.'
+      );
     }
 
     const parser = new PDFParse({ data: buffer });
     try {
       const result = await parser.getText();
       const totalPages = result.total || (result.pages ? result.pages.length : 1);
+
+      if (totalPages > this.MAX_PAGE_COUNT) {
+        throw AppError.validation(
+          `PDF exceeds maximum allowed page count (${this.MAX_PAGE_COUNT} pages). Document has ${totalPages} pages.`
+        );
+      }
 
       const pages: ExtractedPage[] = (result.pages || []).map((p: any, idx: number) => ({
         pageNumber: p.num || idx + 1,
@@ -45,7 +64,7 @@ export class PdfService {
       const fullCleanedText = pages.map(p => p.text).join('\n\n').trim();
 
       if (!fullCleanedText || fullCleanedText.length === 0) {
-        throw new Error(
+        throw AppError.validation(
           'No readable text could be extracted from this PDF. It may be a scanned image or contain non-extractable text.'
         );
       }

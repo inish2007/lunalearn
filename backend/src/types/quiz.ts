@@ -49,7 +49,8 @@ export type SubmitQuizAnswerItem = z.infer<typeof SubmitQuizAnswerItemSchema>;
 export const SubmitQuizSchema = z.object({
   subject_id: z.string().uuid('subject_id must be a valid UUID'),
   topic_id: z.string().uuid('topic_id must be a valid UUID').optional().nullable(),
-  answers: z.array(SubmitQuizAnswerItemSchema).min(1, 'At least one answer must be submitted')
+  answers: z.array(SubmitQuizAnswerItemSchema).min(1, 'At least one answer must be submitted'),
+  idempotency_key: z.string().optional()
 });
 
 export type SubmitQuizInput = z.infer<typeof SubmitQuizSchema>;
@@ -92,6 +93,8 @@ export interface GenerateQuizResponseData {
   }>;
   questions: QuizQuestion[];
   model: string;
+  is_fallback?: boolean;
+  notice?: string;
 }
 
 /**

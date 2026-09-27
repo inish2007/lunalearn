@@ -39,6 +39,18 @@ export function getEnv(): Env {
     }
     console.warn('   Please check backend/.env against backend/.env.example\n');
   }
+
+  const nodeEnv = (process.env.NODE_ENV as Env['NODE_ENV']) || 'development';
+  const supabaseUrl = process.env.SUPABASE_URL || 'https://placeholder.supabase.co';
+  const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || 'placeholder-anon-key';
+  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || 'placeholder-service-key';
+
+  if (nodeEnv === 'production') {
+    const isPlaceholder = !supabaseUrl || supabaseUrl.includes('placeholder') || supabaseUrl.includes('your-project-ref');
+    if (isPlaceholder || !supabaseAnonKey || supabaseAnonKey.includes('placeholder') || !supabaseServiceKey || supabaseServiceKey.includes('placeholder')) {
+      throw new Error('FATAL CONFIGURATION ERROR: NODE_ENV is set to production but live Supabase credentials (SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY) are missing or set to placeholder.');
+    }
+  }
   return {
     SUPABASE_URL: process.env.SUPABASE_URL || 'https://placeholder.supabase.co',
     SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY || 'placeholder-anon-key',

@@ -1,8 +1,9 @@
 import http from 'http';
 import { requireAuth } from '../middleware/auth.middleware.js';
-import { sendSuccess, sendError } from '../routes/domain.routes.js';
 import { StudyAssistantService } from '../services/study-assistant.service.js';
 import { AssistantChatSchema } from '../types/assistant.js';
+import { AppError } from '../types/errors.js';
+import { sendStandardSuccess, sendStandardError, getOrCreateRequestId } from '../lib/response.js';
 
 /**
  * Parses JSON request bodies with payload limits.
@@ -13,14 +14,14 @@ function parseJson<T = unknown>(req: http.IncomingMessage): Promise<T> {
     req.on('data', chunk => {
       raw += chunk.toString();
       if (raw.length > 10 * 1024 * 1024) {
-        reject(new Error('Payload exceeds maximum allowed size of 10MB.'));
+        reject(AppError.payloadTooLarge('Payload exceeds maximum allowed size of 10MB.'));
       }
     });
     req.on('end', () => {
       try {
         resolve(raw ? (JSON.parse(raw) as T) : ({} as T));
       } catch {
-        reject(new Error('Malformed JSON payload.'));
+        reject(AppError.validation('Malformed JSON payload.'));
       }
     });
     req.on('error', reject);
@@ -38,6 +39,7 @@ export async function handleAssistantRoutes(
   const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
   const pathname = url.pathname;
   const method = req.method?.toUpperCase();
+  const requestId = getOrCreateRequestId(req);
 
   // Match:
   // POST /api/assistant/chat
@@ -53,7 +55,12 @@ export async function handleAssistantRoutes(
   }
 
   if (method !== 'POST') {
-    sendError(res, 'MethodNotAllowed', `Method ${method} not supported on ${pathname}. Use POST.`, 405);
+    sendStandardError(
+      res,
+      AppError.validation(`Method ${method} not supported on ${pathname}. Use POST.`),
+      requestId,
+      { req, statusCodeOverride: 405 }
+    );
     return true;
   }
 
@@ -63,12 +70,14 @@ export async function handleAssistantRoutes(
       const parsed = AssistantChatSchema.safeParse(body);
 
       if (!parsed.success) {
-        return sendError(
+        return sendStandardError(
           res,
-          'ValidationError',
-          'Invalid assistant chat payload',
-          400,
-          parsed.error.issues.map(i => ({ field: i.path.join('.'), message: i.message }))
+          AppError.validation(
+            'Invalid assistant chat payload',
+            parsed.error.issues.map(i => ({ field: i.path.join('.'), message: i.message }))
+          ),
+          requestId,
+          { req }
         );
       }
 
@@ -78,15 +87,21 @@ export async function handleAssistantRoutes(
         parsed.data
       );
 
-      return sendSuccess(
+      return sendStandardSuccess(
         res,
         response,
         200,
-        'Assistant response generated successfully'
+        {
+          message: 'Assistant response generated successfully',
+          requestId
+        }
       );
     } catch (err: unknown) {
+      if (err instanceof AppError) {
+        return sendStandardError(res, err, requestId, { req });
+      }
       const message = err instanceof Error ? err.message : 'Error in AI Study Assistant';
-      return sendError(res, 'AssistantError', message, 500);
+      return sendStandardError(res, AppError.aiError(message), requestId, { req });
     }
   });
 

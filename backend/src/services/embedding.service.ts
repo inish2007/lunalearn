@@ -9,6 +9,8 @@
  */
 
 import { env } from '../config/env.js';
+import { retryWithBackoff } from '../lib/circuit-breaker.js';
+import { AppError } from '../types/errors.js';
 
 interface GeminiEmbedResponse {
   embedding?: {
@@ -62,38 +64,42 @@ export class EmbeddingService {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:embedContent?key=${apiKey}`;
 
     try {
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          content: { parts: [{ text: cleanText }] },
-          outputDimensionality: this.DEFAULT_DIMENSION
-        }),
-        signal: AbortSignal.timeout(10000)
-      });
+      return await retryWithBackoff(
+        async () => {
+          const response = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              content: { parts: [{ text: cleanText }] },
+              outputDimensionality: this.DEFAULT_DIMENSION
+            }),
+            signal: AbortSignal.timeout(10000)
+          });
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        if (response.status === 429) {
-          console.warn(`⚠️ Gemini embedContent API rate-limited (HTTP 429). Employing fallback vector protection.`);
-        } else {
-          console.warn(`⚠️ Gemini embedContent API returned HTTP ${response.status}: ${errorText}`);
-        }
-        return this.generateDeterministicVector(cleanText, this.DEFAULT_DIMENSION);
-      }
+          if (!response.ok) {
+            const errorText = await response.text();
+            const err = new Error(`Gemini embedContent API HTTP ${response.status}: ${errorText}`);
+            (err as any).status = response.status;
+            throw err;
+          }
 
-      const data = (await response.json()) as GeminiEmbedResponse;
-      const values = data.embedding?.values;
+          const data = (await response.json()) as GeminiEmbedResponse;
+          const values = data.embedding?.values;
 
-      if (!values || !Array.isArray(values) || values.length === 0) {
-        return this.generateDeterministicVector(cleanText, this.DEFAULT_DIMENSION);
-      }
+          if (!values || !Array.isArray(values) || values.length === 0) {
+            throw new Error('Gemini API returned empty embedding vector');
+          }
 
-      return values;
+          return values;
+        },
+        { maxRetries: 3, initialDelayMs: 1000, operationName: 'GeminiEmbedContent' }
+      );
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      console.warn(`⚠️ Gemini API request error (${msg}). Using fallback vector.`);
-      return this.generateDeterministicVector(cleanText, this.DEFAULT_DIMENSION);
+      const status = (err as any)?.status;
+      if (status === 429 || String(err).includes('429')) {
+        throw AppError.rateLimited('Gemini embedding API rate limit reached after retries. Please wait before retrying.');
+      }
+      throw err instanceof AppError ? err : AppError.aiError(`Gemini embedding failed: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 
@@ -125,33 +131,44 @@ export class EmbeddingService {
       }));
 
       try {
-        const response = await fetch(batchUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ requests }),
-          signal: AbortSignal.timeout(15000)
-        });
+        const batchVectors = await retryWithBackoff(
+          async () => {
+            const response = await fetch(batchUrl, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ requests }),
+              signal: AbortSignal.timeout(15000)
+            });
 
-        if (response.ok) {
-          const data = (await response.json()) as GeminiBatchEmbedResponse;
-          if (data.embeddings && Array.isArray(data.embeddings)) {
-            for (const item of data.embeddings) {
-              results.push(item.values || this.generateDeterministicVector('fallback', this.DEFAULT_DIMENSION));
+            if (!response.ok) {
+              const errorText = await response.text();
+              const err = new Error(`Gemini batchEmbedContents HTTP ${response.status}: ${errorText}`);
+              (err as any).status = response.status;
+              throw err;
             }
-            continue;
-          }
-        }
 
-        // Fallback for this batch if batchEmbedContents failed
-        for (const t of textBatch) {
-          const singleVec = await this.embedText(t);
-          results.push(singleVec);
+            const data = (await response.json()) as GeminiBatchEmbedResponse;
+            if (!data.embeddings || !Array.isArray(data.embeddings) || data.embeddings.length === 0) {
+              throw new Error('Gemini batchEmbedContents returned empty embeddings array');
+            }
+
+            return data.embeddings.map(item => {
+              if (!item.values || item.values.length === 0) {
+                throw new Error('Received empty embedding values in batch response');
+              }
+              return item.values;
+            });
+          },
+          { maxRetries: 3, initialDelayMs: 1000, operationName: 'GeminiBatchEmbedContents' }
+        );
+
+        results.push(...batchVectors);
+      } catch (err: unknown) {
+        const status = (err as any)?.status;
+        if (status === 429 || String(err).includes('429')) {
+          throw AppError.rateLimited('Gemini batch embedding rate limit reached after retries.');
         }
-      } catch {
-        // Fallback for this batch
-        for (const t of textBatch) {
-          results.push(this.generateDeterministicVector(t, this.DEFAULT_DIMENSION));
-        }
+        throw err instanceof AppError ? err : AppError.aiError(`Gemini batch embedding failed: ${err instanceof Error ? err.message : String(err)}`);
       }
     }
 

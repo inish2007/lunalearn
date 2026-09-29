@@ -171,7 +171,13 @@ export class RagMaterialService {
             .insert(batch);
 
           if (batchErr) {
-            console.warn(`⚠️ Warning: Failed to insert chunk batch into document_chunks: ${batchErr.message}`);
+            const errorMsg = `Failed to insert chunk batch into document_chunks: ${batchErr.message}`;
+            RagJobsService.updateJob(activeJobId, {
+              status: 'FAILED',
+              progressPercent: 0,
+              error: errorMsg
+            });
+            throw AppError.internal(errorMsg, batchErr);
           }
         }
       }

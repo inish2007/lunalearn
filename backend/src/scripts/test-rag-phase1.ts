@@ -4,12 +4,15 @@
  * 1. PDF validation & text extraction with page tracking (PdfService).
  * 2. Overlapping chunk generator sized for embedding (ChunkingService).
  * 3. Zod schema validation for upload requests (UploadPdfJsonSchema).
- * 4. End-to-end ingestion pipeline inserting into materials & document_chunks (embedding: null).
+ * 4. End-to-end ingestion pipeline inserting into materials & document_chunks.
  */
 
 import { PdfService } from '../services/pdf.service.js';
 import { ChunkingService } from '../services/chunking.service.js';
 import { RagMaterialService } from '../services/rag-material.service.js';
+import { EmbeddingService } from '../services/embedding.service.js';
+import { RagJobsService } from '../services/rag-jobs.service.js';
+import { AppError, ErrorCode } from '../types/errors.js';
 import { UploadPdfJsonSchema } from '../types/rag.js';
 
 let passed = 0;
@@ -67,7 +70,11 @@ function createSyntheticPdf(pagesContent: string[]): Buffer {
 /**
  * Creates a mock Supabase client for testing pipeline database operations.
  */
-function createMockDb(initialSubjects: any[], initialUnits: any[]) {
+function createMockDb(
+  initialSubjects: any[],
+  initialUnits: any[],
+  documentChunkInsertError: { message: string } | null = null
+) {
   const store: Record<string, any[]> = {
     subjects: [...initialSubjects],
     units: [...initialUnits],
@@ -102,6 +109,10 @@ function createMockDb(initialSubjects: any[], initialUnits: any[]) {
           error: filtered[0] ? null : { message: 'Row not found' }
         }),
         insert: (rows: any | any[]) => {
+          if (tableName === 'document_chunks' && documentChunkInsertError) {
+            return { data: null, error: documentChunkInsertError };
+          }
+
           const toInsert = Array.isArray(rows) ? rows : [rows];
           const inserted = toInsert.map((r, idx) => ({
             id: r.id || `gen-uuid-${tableName}-${Date.now()}-${idx}`,
@@ -265,6 +276,8 @@ async function runRagPhase1Tests() {
     'Unit 3 Normalization: 1NF requires atomic values. 2NF requires full functional dependency. 3NF removes transitive dependencies.'
   ]);
 
+  const originalEmbedBatch = EmbeddingService.embedBatch;
+  EmbeddingService.embedBatch = async texts => texts.map(() => new Array(EmbeddingService.DEFAULT_DIMENSION).fill(0.25));
   const pipelineResult = await RagMaterialService.processAndIndexPdf({
     db: mockDb,
     profileId,
@@ -273,6 +286,7 @@ async function runRagPhase1Tests() {
     fileName: 'DBMS_Unit3_Notes.pdf',
     fileBuffer: samplePdfBuffer
   });
+  EmbeddingService.embedBatch = originalEmbedBatch;
 
   const store = mockDb._getStore();
 
@@ -297,6 +311,63 @@ async function runRagPhase1Tests() {
   assert(storedChunk.metadata.subject_id === fakeSubjectId, 'Chunk metadata contains subject_id');
   assert(storedChunk.metadata.unit_id === fakeUnitId, 'Chunk metadata contains unit_id');
   assert(storedChunk.content.includes('Normalization'), 'Chunk content contains extracted syllabus text');
+
+  console.log('\n5. Testing provider rate-limit and chunk persistence failures...');
+
+  const originalFetch = globalThis.fetch;
+  const originalApiKey = process.env.GEMINI_API_KEY;
+  let embeddingRequests = 0;
+  process.env.GEMINI_API_KEY = 'test-gemini-api-key';
+  globalThis.fetch = (async () => {
+    embeddingRequests++;
+    return new Response('quota exceeded', { status: 429 });
+  }) as typeof fetch;
+
+  try {
+    await EmbeddingService.embedText('rate-limited embedding');
+    assert(false, 'Exhausted Gemini rate limit throws instead of returning a synthetic vector');
+  } catch (error) {
+    assert(error instanceof AppError && error.code === ErrorCode.RATE_LIMITED && error.statusCode === 429,
+      'Exhausted Gemini rate limit throws a rate-limited AppError');
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalApiKey === undefined) delete process.env.GEMINI_API_KEY;
+    else process.env.GEMINI_API_KEY = originalApiKey;
+  }
+  assert(embeddingRequests === 4, 'Gemini embedding request is retried before failing');
+
+  const chunkInsertError = { message: 'Postgres chunk insert failed' };
+  const failedJob = RagJobsService.createJob({ profileId, subjectId: fakeSubjectId, fileName: 'failed.pdf' });
+  const failedMockDb = createMockDb(
+    [{ id: fakeSubjectId, name: 'Database Management Systems', code: 'CS-401' }],
+    [{ id: fakeUnitId, title: 'Unit 3: Normalization', subject_id: fakeSubjectId }],
+    chunkInsertError
+  );
+  EmbeddingService.embedBatch = async texts => texts.map(() => new Array(EmbeddingService.DEFAULT_DIMENSION).fill(0.25));
+  let chunkInsertThrown: unknown;
+  try {
+    await RagMaterialService.processAndIndexPdf({
+      db: failedMockDb,
+      profileId,
+      subjectId: fakeSubjectId,
+      unitId: fakeUnitId,
+      fileName: 'failed.pdf',
+      fileBuffer: samplePdfBuffer,
+      jobId: failedJob.id
+    });
+  } catch (error) {
+    chunkInsertThrown = error;
+  } finally {
+    EmbeddingService.embedBatch = originalEmbedBatch;
+  }
+
+  const failedJobState = RagJobsService.getJob(failedJob.id);
+  assert(chunkInsertThrown instanceof AppError && chunkInsertThrown.code === ErrorCode.INTERNAL_SERVER_ERROR,
+    'Chunk batch insertion failure throws an internal AppError');
+  assert(failedJobState?.status === 'FAILED' && failedJobState.progressPercent === 0,
+    'Chunk batch insertion failure marks the job FAILED');
+  assert(failedJobState?.error === chunkInsertError.message,
+    'Failed job preserves the exact Postgres error message');
 
   console.log(`\n====================================================`);
   console.log(`RAG Phase 1 Verification: ${passed} passed, ${failed} failed.`);

@@ -150,6 +150,37 @@ async function runRagPhase2Tests() {
   );
 
   const sampleQuery = 'Explain Boyce-Codd Normal Form and functional dependencies';
+  const originalFetch = globalThis.fetch;
+  const originalApiKey = process.env.GEMINI_API_KEY;
+  const createTestEmbedding = (text: string): number[] => {
+    const vector = new Array(EmbeddingService.DEFAULT_DIMENSION).fill(0);
+    if (text === sampleQuery) {
+      vector[0] = 1;
+    } else if (text.startsWith('BCNF')) {
+      vector[0] = 0.8;
+      vector[1] = 0.6;
+    } else if (text.startsWith('The history')) {
+      vector[1] = 1;
+    } else {
+      vector[0] = 1;
+    }
+    return vector;
+  };
+  process.env.GEMINI_API_KEY = 'test-gemini-api-key';
+  globalThis.fetch = (async (input, init) => {
+    const requestBody = JSON.parse(String(init?.body));
+    if (String(input).includes(':batchEmbedContents')) {
+      return new Response(JSON.stringify({
+        embeddings: requestBody.requests.map((request: any) => ({
+          values: createTestEmbedding(request.content.parts[0].text)
+        }))
+      }), { headers: { 'Content-Type': 'application/json' } });
+    }
+    return new Response(JSON.stringify({
+      embedding: { values: createTestEmbedding(requestBody.content.parts[0].text) }
+    }), { headers: { 'Content-Type': 'application/json' } });
+  }) as typeof fetch;
+
   const queryEmbedding = await EmbeddingService.embedText(sampleQuery);
 
   assert(Array.isArray(queryEmbedding), 'Returns vector array');
@@ -325,6 +356,9 @@ async function runRagPhase2Tests() {
     assert(coercedParsed.data.threshold === 0.25, 'String "0.25" coerces to number 0.25');
   }
 
+  globalThis.fetch = originalFetch;
+  if (originalApiKey === undefined) delete process.env.GEMINI_API_KEY;
+  else process.env.GEMINI_API_KEY = originalApiKey;
 
   console.log(`\n====================================================`);
   console.log(`RAG Phase 2 Verification: ${passed} passed, ${failed} failed.`);

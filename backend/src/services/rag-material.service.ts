@@ -171,7 +171,12 @@ export class RagMaterialService {
             .insert(batch);
 
           if (batchErr) {
-            console.warn(`⚠️ Warning: Failed to insert chunk batch into document_chunks: ${batchErr.message}`);
+            RagJobsService.updateJob(activeJobId, {
+              status: 'FAILED',
+              progressPercent: 0,
+              error: batchErr.message
+            });
+            throw AppError.internal('Failed to persist document chunk batch.', batchErr);
           }
         }
       }
@@ -202,12 +207,15 @@ export class RagMaterialService {
         jobId: activeJobId
       };
     } catch (err: unknown) {
-      const errorMessage = err instanceof Error ? err.message : String(err);
-      RagJobsService.updateJob(activeJobId, {
-        status: 'FAILED',
-        progressPercent: 0,
-        error: errorMessage
-      });
+      const currentJob = RagJobsService.getJob(activeJobId);
+      if (currentJob?.status !== 'FAILED') {
+        const errorMessage = err instanceof Error ? err.message : String(err);
+        RagJobsService.updateJob(activeJobId, {
+          status: 'FAILED',
+          progressPercent: 0,
+          error: errorMessage
+        });
+      }
       throw err;
     }
   }

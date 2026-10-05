@@ -9,6 +9,8 @@
  */
 
 import { env } from '../config/env.js';
+import { retryWithBackoff } from '../lib/circuit-breaker.js';
+import { AppError } from '../types/errors.js';
 
 interface GeminiEmbedResponse {
   embedding?: {
@@ -55,45 +57,47 @@ export class EmbeddingService {
 
     const apiKey = this.getApiKey();
     if (!apiKey) {
-      return this.generateDeterministicVector(cleanText, this.DEFAULT_DIMENSION);
+      throw AppError.aiError('Gemini API key is not configured.', false);
     }
 
     const model = this.getModelName();
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:embedContent?key=${apiKey}`;
 
     try {
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          content: { parts: [{ text: cleanText }] },
-          outputDimensionality: this.DEFAULT_DIMENSION
-        }),
-        signal: AbortSignal.timeout(10000)
-      });
+      const data = await retryWithBackoff(async () => {
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            content: { parts: [{ text: cleanText }] },
+            outputDimensionality: this.DEFAULT_DIMENSION
+          }),
+          signal: AbortSignal.timeout(10000)
+        });
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        if (response.status === 429) {
-          console.warn(`⚠️ Gemini embedContent API rate-limited (HTTP 429). Employing fallback vector protection.`);
-        } else {
-          console.warn(`⚠️ Gemini embedContent API returned HTTP ${response.status}: ${errorText}`);
+        if (!response.ok) {
+          const error = new Error(`Gemini embedContent API returned HTTP ${response.status}: ${await response.text()}`) as Error & { status: number };
+          error.status = response.status;
+          throw error;
         }
-        return this.generateDeterministicVector(cleanText, this.DEFAULT_DIMENSION);
-      }
 
-      const data = (await response.json()) as GeminiEmbedResponse;
+        return await response.json() as GeminiEmbedResponse;
+      }, { operationName: 'Gemini embedContent' });
+
       const values = data.embedding?.values;
-
       if (!values || !Array.isArray(values) || values.length === 0) {
-        return this.generateDeterministicVector(cleanText, this.DEFAULT_DIMENSION);
+        throw AppError.aiError('Gemini embedContent API returned no embedding values.');
       }
 
       return values;
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      console.warn(`⚠️ Gemini API request error (${msg}). Using fallback vector.`);
-      return this.generateDeterministicVector(cleanText, this.DEFAULT_DIMENSION);
+      const status = (err as { status?: number })?.status;
+      if (status === 429) {
+        throw AppError.rateLimited('Gemini embedding API rate limit exceeded.');
+      }
+      if (err instanceof AppError) throw err;
+      const message = err instanceof Error ? err.message : String(err);
+      throw AppError.aiError(`Gemini embedContent request failed: ${message}`);
     }
   }
 
@@ -106,7 +110,7 @@ export class EmbeddingService {
 
     const apiKey = this.getApiKey();
     if (!apiKey) {
-      return texts.map(t => this.generateDeterministicVector(t, this.DEFAULT_DIMENSION));
+      throw AppError.aiError('Gemini API key is not configured.', false);
     }
 
     const model = this.getModelName();
@@ -125,33 +129,37 @@ export class EmbeddingService {
       }));
 
       try {
-        const response = await fetch(batchUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ requests }),
-          signal: AbortSignal.timeout(15000)
-        });
+        const data = await retryWithBackoff(async () => {
+          const response = await fetch(batchUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ requests }),
+            signal: AbortSignal.timeout(15000)
+          });
 
-        if (response.ok) {
-          const data = (await response.json()) as GeminiBatchEmbedResponse;
-          if (data.embeddings && Array.isArray(data.embeddings)) {
-            for (const item of data.embeddings) {
-              results.push(item.values || this.generateDeterministicVector('fallback', this.DEFAULT_DIMENSION));
-            }
-            continue;
+          if (!response.ok) {
+            const error = new Error(`Gemini batchEmbedContents API returned HTTP ${response.status}: ${await response.text()}`) as Error & { status: number };
+            error.status = response.status;
+            throw error;
           }
+
+          return await response.json() as GeminiBatchEmbedResponse;
+        }, { operationName: 'Gemini batchEmbedContents' });
+
+        if (!data.embeddings || !Array.isArray(data.embeddings) || data.embeddings.length !== textBatch.length ||
+          data.embeddings.some(item => !Array.isArray(item.values) || item.values.length === 0)) {
+          throw AppError.aiError('Gemini batchEmbedContents API returned incomplete embedding values.');
         }
 
-        // Fallback for this batch if batchEmbedContents failed
-        for (const t of textBatch) {
-          const singleVec = await this.embedText(t);
-          results.push(singleVec);
+        results.push(...data.embeddings.map(item => item.values));
+      } catch (err: unknown) {
+        const status = (err as { status?: number })?.status;
+        if (status === 429) {
+          throw AppError.rateLimited('Gemini embedding API rate limit exceeded.');
         }
-      } catch {
-        // Fallback for this batch
-        for (const t of textBatch) {
-          results.push(this.generateDeterministicVector(t, this.DEFAULT_DIMENSION));
-        }
+        if (err instanceof AppError) throw err;
+        const message = err instanceof Error ? err.message : String(err);
+        throw AppError.aiError(`Gemini batchEmbedContents request failed: ${message}`);
       }
     }
 

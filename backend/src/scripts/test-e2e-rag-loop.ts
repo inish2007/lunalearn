@@ -17,6 +17,7 @@ import { StudyAssistantService } from '../services/study-assistant.service.js';
 import { QuizService } from '../services/quiz.service.js';
 import { AcademicEngineService } from '../services/academic-engine.service.js';
 import { PlannerContextService } from '../services/planner-context.service.js';
+import { EmbeddingService } from '../services/embedding.service.js';
 
 let passed = 0;
 let failed = 0;
@@ -251,6 +252,19 @@ async function runReactiveLoopTests() {
   console.log('🔄 LunaLearn Phase 6 — End-to-End AI/RAG Reactive Loop Test');
   console.log('================================================================\n');
 
+  const originalEmbedText = EmbeddingService.embedText;
+  const originalEmbedBatch = EmbeddingService.embedBatch;
+  EmbeddingService.embedText = async () => {
+    const vector = new Array(EmbeddingService.DEFAULT_DIMENSION).fill(0);
+    vector[0] = 1;
+    return vector;
+  };
+  EmbeddingService.embedBatch = async texts => texts.map(() => {
+    const vector = new Array(EmbeddingService.DEFAULT_DIMENSION).fill(0);
+    vector[0] = 1;
+    return vector;
+  });
+
   const { client, tables, profileId, subjectId, unitId, topicId } = createReactiveDbStore();
 
   // --------------------------------------------------------------------------
@@ -474,6 +488,9 @@ async function runReactiveLoopTests() {
     typeof rateLimitSimAssistant.answer === 'string' && rateLimitSimAssistant.answer.length > 0,
     'Rate-limit protection: AI Study Assistant does not crash under high demand'
   );
+
+  EmbeddingService.embedText = originalEmbedText;
+  EmbeddingService.embedBatch = originalEmbedBatch;
 
   // --------------------------------------------------------------------------
   // Summary

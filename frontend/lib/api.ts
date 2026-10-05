@@ -32,6 +32,14 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
 const TOKEN_KEY = 'lunalearn_auth_token';
 const REFRESH_TOKEN_KEY = 'lunalearn_auth_refresh_token';
 const PROFILE_KEY = 'lunalearn_auth_profile';
+const AI_REQUEST_TIMEOUT_MS = 30_000;
+
+const AI_REQUEST_PATHS = new Set([
+  '/assistant/chat',
+  '/quiz/generate',
+  '/rag/search',
+  '/rag/upload'
+]);
 
 export class ClientAppError extends Error implements AppError {
   public readonly code: string;
@@ -166,6 +174,46 @@ export interface RequestOptions extends RequestInit {
 }
 
 async function request<T>(path: string, options: RequestOptions = {}, isRetry = false): Promise<T> {
+  const endpoint = path.split('?')[0];
+  if (!AI_REQUEST_PATHS.has(endpoint)) {
+    return requestWithoutTimeout<T>(path, options, isRetry);
+  }
+
+  const controller = new AbortController();
+  let timedOut = false;
+  const abortFromCaller = () => controller.abort(options.signal?.reason);
+  if (options.signal?.aborted) {
+    abortFromCaller();
+  } else {
+    options.signal?.addEventListener('abort', abortFromCaller, { once: true });
+  }
+
+  const timeoutId = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, AI_REQUEST_TIMEOUT_MS);
+
+  try {
+    return await requestWithoutTimeout<T>(path, { ...options, signal: controller.signal }, isRetry);
+  } catch (err: unknown) {
+    if (timedOut) {
+      throw new ClientAppError({
+        message: 'The AI request timed out after 30 seconds.',
+        code: 'REQUEST_TIMEOUT',
+        userMessage: 'This AI request took too long and was stopped.',
+        retryable: true,
+        status: 408,
+        actionSuggestion: 'Retry the request. If it times out again, check your connection or try a shorter prompt.'
+      });
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeoutId);
+    options.signal?.removeEventListener('abort', abortFromCaller);
+  }
+}
+
+async function requestWithoutTimeout<T>(path: string, options: RequestOptions, isRetry: boolean): Promise<T> {
   const token = getStoredToken();
   const headers = new Headers(options.headers || {});
 
@@ -219,10 +267,14 @@ async function request<T>(path: string, options: RequestOptions = {}, isRetry = 
         const refreshRes = await fetch(`${API_BASE}/auth/refresh`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ refresh_token: storedRefresh })
+          body: JSON.stringify({ refresh_token: storedRefresh }),
+          signal: options.signal
         });
 
-        const refreshJson = await refreshRes.json().catch(() => null);
+        const refreshJson = await refreshRes.json().catch(err => {
+          if (options.signal?.aborted) throw err;
+          return null;
+        });
 
         if (refreshRes.ok && refreshJson?.success && refreshJson?.data?.session) {
           const newAccessToken = refreshJson.data.session.access_token;
@@ -235,7 +287,8 @@ async function request<T>(path: string, options: RequestOptions = {}, isRetry = 
           // Retry the request ONCE with new access token
           return request<T>(path, options, true);
         }
-      } catch {
+      } catch (err) {
+        if (options.signal?.aborted) throw err;
         // Refresh failed
       } finally {
         isRefreshing = false;
@@ -247,7 +300,10 @@ async function request<T>(path: string, options: RequestOptions = {}, isRetry = 
   }
 
   // Parse JSON response body
-  const json: any = await res.json().catch(() => null);
+  const json: any = await res.json().catch(err => {
+    if (options.signal?.aborted) throw err;
+    return null;
+  });
 
   if (!res.ok || (json && json.success === false)) {
     const errorObj = json?.error;

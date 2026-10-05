@@ -548,6 +548,10 @@ export const api = {
   // --------------------------------------------------------------------------
   // 7. Materials API
   // --------------------------------------------------------------------------
+  activity: {
+    get() { return request<{xp:number;level:number;progress_percent:number;next_level_xp:number;events:Array<{id:string;activity_key:string;amount:number;created_at:string}>;sessions:Array<{id:string;subject_id:string;topic_id?:string;duration_minutes:number;started_at:string;ended_at:string;session_type:string;notes?:string}>}>('/activity'); },
+    log(payload: {id:string;subject_id:string;topic_id?:string|null;session_type:string;started_at:string;ended_at:string;notes:string;timezone:string}) { return request('/study-sessions',{method:'POST',body:JSON.stringify(payload)}); }
+  },
   materials: {
     async content(id: string, signal?: AbortSignal): Promise<Blob> {
       const response = await fetch(`${API_BASE}/materials/${encodeURIComponent(id)}/content`, { headers: { Authorization: `Bearer ${getStoredToken()}` }, signal });

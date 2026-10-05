@@ -1,3 +1,4 @@
+import { handleActivityRoutes } from './routes/activity.routes.js';
 import http from 'http';
 import { env } from './config/env.js';
 import { handleAuthRoutes } from './routes/auth.routes.js';
@@ -225,6 +226,8 @@ export const server = http.createServer(async (req, res) => {
     // 1. Auth Routes Dispatcher
     const authHandled = await handleAuthRoutes(req, res);
     if (authHandled) return;
+
+    if (await handleActivityRoutes(req, res)) return;
 
     // 2. Core Domain CRUD Routes Dispatcher
     const domainHandled = await handleDomainRoutes(req, res);

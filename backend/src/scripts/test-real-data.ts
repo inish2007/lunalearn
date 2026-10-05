@@ -33,6 +33,13 @@ try {
   assert.equal(Engine.calculateTopicCompletion([]), 0);
   assert.equal(Engine.calculateAssignmentCompletion([]), 100);
   assert.equal(Engine.calculateWeightedReadiness({topic_completion:60,quiz_performance:80,revision_activity:50,assignment_completion:100}),68);
+  await (db as any).from('subjects').insert({id:'subject',profile_id:'student-a',name:'Test'});
+  const session={id:'session-1',subject_id:'subject',session_type:'focus',timezone:'UTC',started_at:new Date(Date.now()-150*60000).toISOString(),ended_at:new Date(Date.now()-10*60000).toISOString()};
+  const logged=await (db as any).rpc('log_study_session',{p_session:session});assert.equal(logged.error,null);
+  assert.equal(logged.data.duration_minutes,140);
+  assert.ok((await (db as any).rpc('log_study_session',{p_session:{...session,id:'session-2'}})).error,'Overlap rejected');
+  const ledger=await (db as any).from('xp_events').select('*');assert.equal(ledger.data.filter((e:any)=>e.activity_key.startsWith('session:')).reduce((n:number,e:any)=>n+e.amount,0),24);
+  const again=await (db as any).rpc('log_study_session',{p_session:session});assert.equal(again.data.id,session.id);
   console.log('Real-data formulas and storage: passed');
 } finally { process.chdir(original); fs.rmSync(temp, { recursive:true, force:true }); }
 

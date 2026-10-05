@@ -1,4 +1,5 @@
 'use client';
+import { StudyActivity } from './StudyActivity';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { AssistantSourceChunk } from '@/lib/types/academic';
@@ -1337,6 +1338,7 @@ function Planner() {
 
   return (
     <>
+      <StudyActivity />
       <PageHeader
         eyebrow="Adaptive daily plan"
         title="Your study planner"
@@ -2071,6 +2073,7 @@ function Profile() {
 
   return (
     <>
+      <StudyActivity />
       <PageHeader
         eyebrow="Long-term learner view"
         title="Personal learning profile"

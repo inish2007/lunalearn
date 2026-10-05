@@ -160,7 +160,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <div className="mt-3.5 h-1.5 overflow-hidden rounded-full bg-highlight/30">
             <div
               className="h-full rounded-full bg-primary"
-              style={{ width: `${Math.min(100, Math.max(15, (studentXp % 500) / 5))}%` }}
+              style={{ width: `${(studentXp % 500) / 5}%` }}
             />
           </div>
           <p className="mt-2 text-xs font-semibold text-primary">

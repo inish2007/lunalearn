@@ -33,6 +33,7 @@ interface LocalDatabaseState {
   quiz_results: QuizResult[];
   study_sessions: StudySession[];
   quiz_runs: any[];
+  xp_events: any[];
 }
 
 function getInitialState(): LocalDatabaseState {
@@ -48,6 +49,7 @@ function getInitialState(): LocalDatabaseState {
     document_chunks: [],
     quiz_results: [],
     quiz_runs: [],
+    xp_events: [],
     study_sessions: []
   };
 }
@@ -102,6 +104,7 @@ export class LocalDevStore {
 
   private saveState(stateToSave = this.state): void {
     try {
+      this.collectXp(stateToSave);
       const dir = path.dirname(this.storageFilePath);
       if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
       const temporary = this.storageFilePath + '.tmp';
@@ -110,6 +113,25 @@ export class LocalDevStore {
     } catch (err) {
       throw err;
     }
+  }
+
+  private collectXp(state: LocalDatabaseState): void {
+    state.xp_events ||= [];
+    const award=(profile:string,key:string,amount:number,day?:string)=>{
+      if(state.xp_events.some(e=>e.profile_id===profile && e.activity_key===key)) return;
+      state.xp_events.push({id:crypto.randomUUID(),profile_id:profile,activity_key:key,amount,local_day:day || null,created_at:new Date().toISOString()});
+    };
+    for(const t of state.topics) if(t.status==='completed' && !['Core Concepts & Terminology','Applied Systems & Practice'].includes(t.title)) {
+      const unit=state.units.find(u=>u.id===t.unit_id);const sub=state.subjects.find(s=>s.id===unit?.subject_id);
+      if(sub) award(sub.profile_id,'topic:'+t.id,50);
+    }
+    for(const run of state.quiz_runs || []) if(run.result) award(run.profile_id,'quiz:'+run.id,Math.round(run.result.score/5));
+    for(const s of [...state.study_sessions].sort((a,b)=>a.started_at.localeCompare(b.started_at))) if(s.ended_at && Date.parse(s.ended_at)<=Date.now()) {
+      const day=(s as any).local_day || s.started_at.slice(0,10);
+      const used=state.xp_events.filter(e=>e.profile_id===s.profile_id && e.activity_key.startsWith('session:') && e.local_day===day).reduce((n,e)=>n+e.amount,0);
+      award(s.profile_id,'session:'+s.id,Math.max(0,Math.min(24-used,Math.floor(s.duration_minutes/5))),day);
+    }
+    for(const profile of state.profiles) { profile.xp=state.xp_events.filter(e=>e.profile_id===profile.id).reduce((n,e)=>n+e.amount,0);profile.level=1+Math.floor(profile.xp/500); }
   }
 
   public reloadState(): LocalDatabaseState {
@@ -377,7 +399,7 @@ export class LocalDevStore {
     if (tableName === 'profiles') {
       return row.id === userId;
     }
-    if (['subjects', 'exams', 'tasks', 'materials', 'document_chunks', 'quiz_results', 'quiz_runs', 'study_sessions'].includes(tableName)) {
+    if (['subjects', 'exams', 'tasks', 'materials', 'document_chunks', 'quiz_results', 'quiz_runs', 'xp_events', 'study_sessions'].includes(tableName)) {
       return row.profile_id === userId;
     }
     if (tableName === 'units') {
@@ -403,9 +425,26 @@ export class LocalDevStore {
   // --------------------------------------------------------------------------
   public createClient(scopedUserId?: string): SupabaseClient<Database> {
     const self = this;
+    this.collectXp(this.state);
 
     const mockClient: any = {
       rpc: async (name: string, args: any) => {
+        if (name === 'log_study_session') {
+          const before=structuredClone(self.state);
+          try {
+            const s=args.p_session;
+            const existing=self.state.study_sessions.find(x=>x.id===s.id);
+            if(existing) { if(existing.profile_id!==scopedUserId) throw new Error('Session inaccessible'); return {data:existing,error:null}; }
+            if(!self.state.subjects.some(x=>x.id===s.subject_id && x.profile_id===scopedUserId)) throw new Error('Subject not found');
+            if(s.topic_id && !self.state.topics.some(t=>t.id===s.topic_id && self.state.units.some(u=>u.id===t.unit_id && u.subject_id===s.subject_id))) throw new Error('Topic does not belong to subject');
+            const start=Date.parse(s.started_at),end=Date.parse(s.ended_at);
+            if(!Number.isFinite(start)||!Number.isFinite(end)||end>Date.now()||end-start<60000) throw new Error('Invalid session times');
+            if(self.state.study_sessions.some(x=>x.profile_id===scopedUserId && Date.parse(x.started_at)<end && Date.parse(x.ended_at || x.started_at)>start)) throw new Error('This session overlaps an existing session.');
+            const local_day=new Intl.DateTimeFormat('en-CA',{timeZone:s.timezone,year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(start));
+            const session={...s,profile_id:scopedUserId,duration_minutes:Math.floor((end-start)/60000),local_day,created_at:new Date().toISOString()};
+            self.state.study_sessions.push(session);self.saveState();return {data:session,error:null};
+          } catch(error) {self.state=before;return {data:null,error};}
+        }
         if (name !== 'submit_quiz_run') return mockClient.searchRpc(name,args);
         const before = structuredClone(self.state);
         try {
@@ -613,7 +652,7 @@ export class LocalDevStore {
         const now = new Date().toISOString();
         const arr = (Array.isArray(rows) ? rows : [rows]).map(row => ({
           id: row.id || crypto.randomUUID(),
-          ...(scopedUserId && !row.profile_id && ['subjects', 'exams', 'tasks', 'materials', 'document_chunks', 'quiz_results', 'quiz_runs', 'study_sessions'].includes(tableName)
+          ...(scopedUserId && !row.profile_id && ['subjects', 'exams', 'tasks', 'materials', 'document_chunks', 'quiz_results', 'quiz_runs', 'xp_events', 'study_sessions'].includes(tableName)
             ? { profile_id: scopedUserId }
             : {}),
           created_at: row.created_at || now,

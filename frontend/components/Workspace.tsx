@@ -1,4 +1,5 @@
 'use client';
+import { PdfPreview } from './PdfPreview';
 import { ReadinessDetails } from './ReadinessDetails';
 
 import { useEffect, useState } from 'react';
@@ -602,6 +603,7 @@ function Learning() {
 // 2. MATERIALS (/materials)
 // ============================================================================
 function Materials() {
+  const [preview, setPreview] = useState<{id: string; name: string} | null>(null);
   const { materials, subjects, createMaterial, uploadMaterialPdf, deleteMaterial } = useAcademic();
   const [query, setQuery] = useState('');
   const [selectedSubjectFilter, setSelectedSubjectFilter] = useState<string>('all');
@@ -755,7 +757,7 @@ function Materials() {
                           <FileText size={18} />
                         </span>
                         <div className="min-w-0">
-                          <p className="truncate text-sm font-bold">{m.name}</p>
+                          <button className="truncate text-sm font-bold text-primary hover:underline" onClick={() => setPreview(m)}>{m.name}</button>
                           <p className="text-xs text-muted">{m.file_type || 'PDF'}</p>
                         </div>
                       </div>
@@ -778,6 +780,7 @@ function Materials() {
         </div>
       )}
 
+      {preview && <PdfPreview material={preview} onClose={() => setPreview(null)} />}
       {showUploadModal && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4 backdrop-blur-sm">
           <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl">

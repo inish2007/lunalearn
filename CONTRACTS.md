@@ -1574,3 +1574,6 @@ Returned when a brand-new student account asks questions before configuring any 
 
 ## Real-data phase 1: readiness basis
 Readiness now includes `basis`: topics {completed,total}, quizzes {count,limit:10}, revision {minutes,benchmark_minutes:120,window_start,window_end}, assignments {completed,total}, weights and calculated_at. Planner subjects expose readiness_basis. Revision uses started_at in the rolling seven days through now; future sessions are excluded. Existing rounded weights/defaults remain unchanged.
+
+## Real-data phase 2: PDF content
+GET /api/materials/:id/content requires Bearer auth and owned metadata. Returns application/pdf bytes with private/no-store headers; missing originals return 404. Storage failures no longer claim success or silently switch storage backends.

@@ -465,15 +465,25 @@ export class LocalDevStore {
       },
 
       storage: {
-        from: (bucket: string) => ({
-          upload: async (pathStr: string, _fileBuffer: any, _options?: any) => {
-            return { data: { path: pathStr, fullPath: `${bucket}/${pathStr}` }, error: null };
-          },
-          download: async (_pathStr: string) => {
-            return { data: Buffer.from('%PDF-1.4\n%EOF'), error: null };
-          }
-        }),
-        createBucket: async () => ({ data: null, error: null })
+        from: (bucket: string) => {
+          const resolveFile = (key: string) => {
+            if (bucket !== 'materials' || !scopedUserId || key.split('/')[0] !== scopedUserId || key.includes('..') || key.includes('\\')) throw new Error('Storage access denied');
+            const root = path.resolve(process.cwd(), 'uploads');
+            const file = path.resolve(root, key);
+            if (!file.startsWith(root + path.sep)) throw new Error('Invalid storage path');
+            return file;
+          };
+          return {
+            upload: async (key: string, bytes: Buffer) => {
+              try { const file = resolveFile(key); fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, bytes, { flag: 'wx' }); return { data: { path: key }, error: null }; }
+              catch (error) { return { data: null, error }; }
+            },
+            download: async (key: string) => {
+              try { return { data: fs.readFileSync(resolveFile(key)), error: null }; }
+              catch (error) { return { data: null, error }; }
+            }
+          };
+        }
       },
 
       from: (tableName: keyof LocalDatabaseState) => {

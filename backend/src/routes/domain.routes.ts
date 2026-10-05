@@ -1,3 +1,4 @@
+import { StorageService } from '../services/storage.service.js';
 import http from 'http';
 import { requireAuth } from '../middleware/auth.middleware.js';
 import { parseJsonBody } from './auth.routes.js';
@@ -111,6 +112,22 @@ export async function handleDomainRoutes(req: http.IncomingMessage, res: http.Se
   const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
   const pathname = url.pathname;
   const method = req.method?.toUpperCase();
+
+  const contentMatch = pathname.match(/^\/api\/materials\/([^/]+)\/content$/);
+  if (contentMatch) {
+    await requireAuth(async (_req, res, ctx) => {
+      try {
+        if (method !== 'GET') return sendError(res, 'MethodNotAllowed', 'Use GET.', 405);
+        const { data: material, error } = await table(ctx.db, 'materials').select('*').eq('id', decodeURIComponent(contentMatch[1])).maybeSingle();
+        if (error) throw AppError.internal('Material lookup failed', error);
+        if (!material) throw AppError.notFound('Material not found.');
+        const bytes = await StorageService.readPdf(ctx.db, material.storage_path);
+        res.writeHead(200, { 'Content-Type': 'application/pdf', 'Content-Length': bytes.length, 'Content-Disposition': "inline; filename*=UTF-8''" + encodeURIComponent(material.name), 'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff' });
+        res.end(bytes);
+      } catch (err) { sendStandardError(res, err); }
+    })(req, res);
+    return true;
+  }
 
   // ----------------------------------------------------------------------------
   // 1. SUBJECTS CRUD (/api/subjects, /api/subjects/:id)

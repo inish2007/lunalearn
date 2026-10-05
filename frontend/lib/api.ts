@@ -549,6 +549,11 @@ export const api = {
   // 7. Materials API
   // --------------------------------------------------------------------------
   materials: {
+    async content(id: string, signal?: AbortSignal): Promise<Blob> {
+      const response = await fetch(`${API_BASE}/materials/${encodeURIComponent(id)}/content`, { headers: { Authorization: `Bearer ${getStoredToken()}` }, signal });
+      if (!response.ok) { const body = await response.json().catch(() => ({})); throw new Error(body.error?.message || 'Original PDF unavailable—upload again.'); }
+      return response.blob();
+    },
     list(params?: { subject_id?: string; unit_id?: string }, signal?: AbortSignal) {
       const p = new URLSearchParams();
       if (params?.subject_id) p.set('subject_id', params.subject_id);

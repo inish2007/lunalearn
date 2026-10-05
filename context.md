@@ -131,3 +131,6 @@ npm run dev      # Boots Next.js on http://localhost:3000
 The earlier health/audit statements above describe historical verification, not proof of the current environment. Approved PLAN.md now governs phased delivery; layered-build-plan.md preserves the original guide.
 ### Phase 1
 Readiness exposes actual input counts, latest-10 quiz sample and rolling seven-day session basis. Exams and Dashboard show explanations. Shared readiness/planner types and CONTRACTS updated. Backend typecheck and frontend typecheck checked for this phase. Live provider/storage verification remains pending.
+
+### Phase 2
+Actual local PDF bytes now persist, with scoped path checks and authenticated content retrieval. My Materials opens an in-app preview/download dialog. Missing legacy originals request re-upload. Both typechecks passed; isolated storage/formula tests added. Live Supabase remains unverified.

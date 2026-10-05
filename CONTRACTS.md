@@ -1577,3 +1577,5 @@ Readiness now includes `basis`: topics {completed,total}, quizzes {count,limit:1
 
 ## Real-data phase 2: PDF content
 GET /api/materials/:id/content requires Bearer auth and owned metadata. Returns application/pdf bytes with private/no-store headers; missing originals return 404. Storage failures no longer claim success or silently switch storage backends.
+
+### Phase 3: assistant response fields unchanged; sources retained by UI; is_fallback accurately identifies circuit-breaker fallback. OCR remains deferred.

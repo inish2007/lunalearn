@@ -254,6 +254,7 @@ export class StudyAssistantService {
       };
     }
 
+    let usedFallback = false;
     // Wrap execution with circuit breaker
     try {
       const text = await geminiCircuitBreaker.execute(
@@ -313,11 +314,12 @@ export class StudyAssistantService {
         },
         // Fallback if circuit breaker is open or retries exhaust
         async () => {
+          usedFallback = true;
           return this.generateOfflineResponse(userMessage, sources, activeSubjectName);
         }
       );
 
-      return { text, isFallback: false };
+      return { text, isFallback: usedFallback };
     } catch (_err) {
       logger.warn('AI provider failed after retries. Returning explicitly marked deterministic fallback.');
       return {

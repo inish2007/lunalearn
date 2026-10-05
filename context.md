@@ -134,3 +134,5 @@ Readiness exposes actual input counts, latest-10 quiz sample and rolling seven-d
 
 ### Phase 2
 Actual local PDF bytes now persist, with scoped path checks and authenticated content retrieval. My Materials opens an in-app preview/download dialog. Missing legacy originals request re-upload. Both typechecks passed; isolated storage/formula tests added. Live Supabase remains unverified.
+
+### Phase 3: assistant Markdown, material scope, preserved PDF citations, and truthful circuit-breaker fallback implemented. OCR design saved in docs/OCR-PLAN.md only. Markdown libraries added; raw HTML disabled.

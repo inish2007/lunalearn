@@ -1,4 +1,7 @@
 'use client';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import type { AssistantSourceChunk } from '@/lib/types/academic';
 import { PdfPreview } from './PdfPreview';
 import { ReadinessDetails } from './ReadinessDetails';
 
@@ -873,11 +876,13 @@ function Materials() {
 // 3. AI ASSISTANT (/assistant)
 // ============================================================================
 function Assistant() {
+  const [materialId, setMaterialId] = useState('');
+  const [sourcePreview, setSourcePreview] = useState<AssistantSourceChunk | null>(null);
   const { subjects, materials } = useAcademic();
   const [selectedSubId, setSelectedSubId] = useState<string>(subjects[0]?.id || '');
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
-  const [messages, setMessages] = useState<{ role: 'ai' | 'user'; text: string; isFallback?: boolean; notice?: string }[]>([
+  const [messages, setMessages] = useState<{ role: 'ai' | 'user'; text: string; isFallback?: boolean; notice?: string; sources?: AssistantSourceChunk[] }[]>([
     {
       role: 'ai',
       text: 'Hello! I am your LunaLearn study assistant. Ask me questions about your course materials, explanations of difficult topics, or what to revise today.'
@@ -908,7 +913,7 @@ function Assistant() {
       const res = await api.assistant.chat({
         message: userPrompt,
         subject_id: activeSub?.id || null,
-        material_id: null,
+        material_id: materialId || null,
         conversation_history: history
       });
 
@@ -916,6 +921,7 @@ function Assistant() {
         role: 'ai',
         text: res.answer || 'No answer returned.',
         isFallback: res.is_fallback,
+        sources: res.sources,
         notice: res.notice
       }]);
     } catch (err: unknown) {
@@ -973,6 +979,8 @@ function Assistant() {
               </select>
             </div>
 
+            <label className="p-3 text-sm">Material <select value={materialId} onChange={e => setMaterialId(e.target.value)} className="ml-2 rounded border bg-card p-2"><option value="">All subject materials</option>{activeMaterials.filter(m => m.processed).map(m => <option key={m.id} value={m.id}>{m.name}</option>)}</select></label>
+            {sourcePreview && <PdfPreview material={{ id: sourcePreview.material_id, name: sourcePreview.material_name }} page={sourcePreview.page_number} onClose={() => setSourcePreview(null)} />}
             <div className="flex-1 space-y-4 p-5 overflow-y-auto">
               {messages.map((m, i) => (
                 <div
@@ -981,7 +989,8 @@ function Assistant() {
                     m.role === 'ai' ? 'bg-purple-50 text-ink' : 'ml-auto bg-primary text-white'
                   }`}
                 >
-                  {m.text}
+                  {m.role === 'ai' ? <div className="markdown-answer"><ReactMarkdown remarkPlugins={[remarkGfm]} skipHtml>{m.text}</ReactMarkdown></div> : <p className="whitespace-pre-wrap">{m.text}</p>}
+                  {m.sources?.map((source, n) => <button key={n} className="mt-2 mr-2 text-xs text-primary underline" onClick={() => setSourcePreview(source)}>{source.material_name} · page {source.page_number ?? 'unknown'}</button>)}
                   {m.isFallback && (
                     <p role="status" className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-950">
                       {m.notice || 'The AI model was temporarily unavailable; this answer was generated without it.'}

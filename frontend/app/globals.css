@@ -187,3 +187,7 @@ html.theme-transitioning *:after {
     scroll-behavior: auto !important;
   }
 }
+
+.markdown-answer h1,.markdown-answer h2,.markdown-answer h3 {font-weight:700;margin:1em 0 .5em;font-size:1.1em}
+.markdown-answer p {margin:.6em 0}.markdown-answer ul {list-style:disc;padding-left:1.5em}.markdown-answer ol {list-style:decimal;padding-left:1.5em}
+.markdown-answer pre {overflow:auto;padding:1rem;border-radius:.75rem;background:var(--canvas);white-space:pre}.markdown-answer code {font-family:monospace}.markdown-answer a {text-decoration:underline}.markdown-answer blockquote {border-left:3px solid #A78BFA;padding-left:1em}

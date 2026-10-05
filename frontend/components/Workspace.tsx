@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import {
   ArrowRight,
@@ -33,7 +33,7 @@ import {
   UserRound,
   Wand2
 } from 'lucide-react';
-import { useAcademic } from '@/lib/context/AcademicContext';
+import { TopicUpdateConflictError, useAcademic } from '@/lib/context/AcademicContext';
 import { api, ClientAppError } from '@/lib/api';
 import { AcademicDataErrorBanner, AcademicDataSkeleton, Card, PageHeader, Progress, Risk, TaskRow } from './Ui';
 import type { Subject, Task, Exam, Material, GenerateQuizResponseData, SubmitQuizResponseData, AssistantChatMessage } from '@/lib/types/academic';
@@ -106,7 +106,8 @@ function Learning() {
     deleteUnit,
     createTopic,
     updateTopic,
-    deleteTopic
+    deleteTopic,
+    loadUnitsAndTopics
   } = useAcademic();
 
   const [showSubjectModal, setShowSubjectModal] = useState(false);
@@ -127,6 +128,40 @@ function Learning() {
   const [showTopicModal, setShowTopicModal] = useState(false);
   const [targetUnitId, setTargetUnitId] = useState<string | null>(null);
   const [topicTitle, setTopicTitle] = useState('');
+  const [topicConflict, setTopicConflict] = useState<TopicUpdateConflictError | null>(null);
+  const [resolvingTopicConflict, setResolvingTopicConflict] = useState(false);
+
+  const handleTopicUpdate = async (id: string, patch: Parameters<typeof updateTopic>[1], subjectId: string) => {
+    try {
+      await updateTopic(id, patch, subjectId);
+    } catch (err) {
+      if (err instanceof TopicUpdateConflictError) setTopicConflict(err);
+      else console.error('Failed to update topic:', err);
+    }
+  };
+
+  const resolveTopicConflict = async (choice: 'reload' | 'keep') => {
+    if (!topicConflict) return;
+    setResolvingTopicConflict(true);
+    try {
+      if (choice === 'reload') {
+        if (topicConflict.subjectId) await loadUnitsAndTopics(topicConflict.subjectId);
+      } else if (topicConflict.latestTopic?.updated_at) {
+        await updateTopic(
+          topicConflict.topicId,
+          topicConflict.patch,
+          topicConflict.subjectId,
+          topicConflict.latestTopic.updated_at
+        );
+      }
+      setTopicConflict(null);
+    } catch (err) {
+      if (err instanceof TopicUpdateConflictError) setTopicConflict(err);
+      else console.error('Failed to resolve topic update conflict:', err);
+    } finally {
+      setResolvingTopicConflict(false);
+    }
+  };
 
   const handleAddSubject = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -359,7 +394,7 @@ function Learning() {
                                     type="checkbox"
                                     checked={t.status === 'completed'}
                                     onChange={e => {
-                                      updateTopic(
+                                      void handleTopicUpdate(
                                         t.id,
                                         {
                                           status: e.target.checked ? 'completed' : 'in_progress',
@@ -382,7 +417,7 @@ function Learning() {
 
                                 <div className="flex items-center gap-2">
                                   <button
-                                    onClick={() => updateTopic(t.id, { is_weak: !t.is_weak }, activeSubject.id)}
+                                    onClick={() => { void handleTopicUpdate(t.id, { is_weak: !t.is_weak }, activeSubject.id); }}
                                     className="text-[10px] font-bold text-muted hover:text-primary"
                                   >
                                     {t.is_weak ? 'Unmark weak' : 'Mark weak'}
@@ -516,6 +551,41 @@ function Learning() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {topicConflict && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4 backdrop-blur-sm">
+          <div role="dialog" aria-modal="true" aria-labelledby="topic-conflict-title" className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
+            <h2 id="topic-conflict-title" className="text-lg font-bold">This topic changed elsewhere</h2>
+            <p className="mt-2 text-sm leading-6 text-muted">
+              Another edit was saved before yours. Reload the latest topic or explicitly keep your changes on top of that version.
+            </p>
+            {topicConflict.latestTopic && (
+              <p className="mt-3 rounded-lg bg-canvas p-3 text-xs text-muted">
+                Latest saved status: <strong>{topicConflict.latestTopic.status}</strong>
+                {topicConflict.latestTopic.is_weak ? ' · Marked weak' : ''}
+              </p>
+            )}
+            <div className="mt-5 flex flex-wrap justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => { void resolveTopicConflict('reload'); }}
+                disabled={resolvingTopicConflict}
+                className="rounded-lg border border-highlight px-3 py-2 text-sm font-bold text-muted disabled:opacity-50"
+              >
+                Reload latest
+              </button>
+              <button
+                type="button"
+                onClick={() => { void resolveTopicConflict('keep'); }}
+                disabled={resolvingTopicConflict || !topicConflict.latestTopic?.updated_at}
+                className="rounded-lg bg-primary px-3 py-2 text-sm font-bold text-white disabled:opacity-50"
+              >
+                Keep my changes
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -1220,9 +1290,33 @@ function Tasks() {
 // ============================================================================
 function Planner() {
   const { plannerContext, subjects, exams, tasks, risks } = useAcademic();
+  const [constraintConflict, setConstraintConflict] = useState<ClientAppError | null>(null);
 
   const settings = plannerContext?.student?.study_time_settings;
   const now = new Date();
+
+  useEffect(() => {
+    if (subjects.length === 0 || !plannerContext) {
+      setConstraintConflict(null);
+      return;
+    }
+
+    const controller = new AbortController();
+    let active = true;
+    setConstraintConflict(null);
+
+    api.planner.getContext(undefined, controller.signal, true).catch((err: unknown) => {
+      if (!active || (err instanceof Error && err.name === 'AbortError')) return;
+      if (err instanceof ClientAppError && err.code === 'CONSTRAINT_CONFLICT') {
+        setConstraintConflict(err);
+      }
+    });
+
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [plannerContext?.generated_at, subjects.length]);
 
   return (
     <>
@@ -1247,7 +1341,15 @@ function Planner() {
               </span>
             </div>
 
-            {subjects.length === 0 ? (
+            {constraintConflict ? (
+              <div role="alert" className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
+                <h3 className="font-bold">This schedule isn&apos;t achievable with your available time</h3>
+                <p className="mt-2 leading-6">{constraintConflict.userMessage || constraintConflict.message}</p>
+                <p className="mt-2 text-xs leading-5">
+                  Move the exam date, revise the weak or unfinished topics, or increase your available study hours per day.
+                </p>
+              </div>
+            ) : subjects.length === 0 ? (
               <div className="py-8 text-center text-xs text-muted">
                 Add courses and exams to generate a tailored timeline.
               </div>

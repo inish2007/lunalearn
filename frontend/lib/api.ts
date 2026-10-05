@@ -655,8 +655,11 @@ export const api = {
   // 9. Adaptive Planner API
   // --------------------------------------------------------------------------
   planner: {
-    getContext(subjectId?: string, signal?: AbortSignal) {
-      const query = subjectId ? `?subject_id=${encodeURIComponent(subjectId)}` : '';
+    getContext(subjectId?: string, signal?: AbortSignal, strict = false) {
+      const params = new URLSearchParams();
+      if (subjectId) params.set('subject_id', subjectId);
+      if (strict) params.set('strict', 'true');
+      const query = params.size > 0 ? `?${params.toString()}` : '';
       return request<PlannerContextResponse>(`/planner/context${query}`, { signal });
     }
   },

@@ -34,6 +34,26 @@ export interface AcademicDataSnapshot {
   plannerContext: PlannerContextResponse | null;
 }
 
+export type TopicUpdatePatch = Partial<{ title: string; status: string; is_weak: boolean; mastery_score: number }>;
+
+export class TopicUpdateConflictError extends ClientAppError {
+  constructor(
+    public readonly topicId: string,
+    public readonly subjectId: string | undefined,
+    public readonly patch: TopicUpdatePatch,
+    public readonly latestTopic: Topic | null
+  ) {
+    super({
+      message: 'This topic was changed by someone else before your update was saved.',
+      code: 'CONFLICT',
+      userMessage: 'This topic changed while you were editing it.',
+      retryable: false,
+      status: 409,
+      actionSuggestion: 'Reload the latest topic or explicitly reapply your changes.'
+    });
+  }
+}
+
 interface AcademicContextType {
   profile: Profile | null;
   token: string | null;
@@ -71,7 +91,7 @@ interface AcademicContextType {
   deleteUnit: (id: string, subjectId: string) => Promise<void>;
 
   createTopic: (payload: { unit_id: string; title: string; status?: string; is_weak?: boolean; mastery_score?: number }, subjectId?: string) => Promise<Topic>;
-  updateTopic: (id: string, patch: Partial<{ title: string; status: string; is_weak: boolean; mastery_score: number }>, subjectId?: string) => Promise<Topic>;
+  updateTopic: (id: string, patch: TopicUpdatePatch, subjectId?: string, etag?: string) => Promise<Topic>;
   deleteTopic: (id: string, subjectId?: string) => Promise<void>;
 
   createTask: (payload: { title: string; subject_id?: string | null; type?: string; priority?: string; due_date?: string | null }) => Promise<Task>;
@@ -392,8 +412,35 @@ export function AcademicProvider({ children }: { children: React.ReactNode }) {
     return newTopic;
   };
 
-  const updateTopic = async (id: string, patch: Partial<{ title: string; status: string; is_weak: boolean; mastery_score: number }>, subjectId?: string) => {
-    const updated = await api.topics.update(id, patch);
+  const updateTopic = async (id: string, patch: TopicUpdatePatch, subjectId?: string, etagOverride?: string) => {
+    const cachedTopic = Object.values(topics).flat().find(topic => topic.id === id);
+    let etag = etagOverride || cachedTopic?.updated_at;
+    if (!etag) etag = (await api.topics.get(id)).updated_at;
+    if (!etag) {
+      throw new ClientAppError({
+        message: 'Topic version is unavailable; update was not sent.',
+        code: 'ETAG_REQUIRED',
+        userMessage: 'Unable to verify the latest topic version.',
+        retryable: true,
+        actionSuggestion: 'Refresh your learning data and try again.'
+      });
+    }
+
+    let updated: Topic;
+    try {
+      updated = await api.topics.update(id, patch, etag);
+    } catch (err) {
+      if (!(err instanceof ClientAppError) || err.status !== 409) throw err;
+
+      let latestTopic: Topic | null = null;
+      try {
+        latestTopic = await api.topics.get(id);
+      } catch {
+        // The reload action remains available if fetching the latest row fails.
+      }
+      throw new TopicUpdateConflictError(id, subjectId, patch, latestTopic);
+    }
+
     if (subjectId) await loadUnitsAndTopics(subjectId);
     await refreshAll();
     return updated;

@@ -34,7 +34,7 @@ import {
 } from 'lucide-react';
 import { useAcademic } from '@/lib/context/AcademicContext';
 import { api } from '@/lib/api';
-import { Card, PageHeader, Progress, Risk, TaskRow } from './Ui';
+import { AcademicDataErrorBanner, AcademicDataSkeleton, Card, PageHeader, Progress, Risk, TaskRow } from './Ui';
 import type { Subject, Task, Exam, Material, GenerateQuizResponseData, SubmitQuizResponseData, AssistantChatMessage } from '@/lib/types/academic';
 
 type View =
@@ -55,6 +55,7 @@ const primaryButtonClass =
   'inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-bold text-white shadow-lg shadow-primary/20 transition hover:bg-deep disabled:opacity-50';
 
 export function Workspace({ view }: { view: View }) {
+  const { asyncState, refreshAll } = useAcademic();
   const content: Record<View, React.ReactNode> = {
     learning: <Learning />,
     materials: <Materials />,
@@ -69,6 +70,22 @@ export function Workspace({ view }: { view: View }) {
     notifications: <Notifications />,
     settings: <Settings />
   };
+
+  if (asyncState.status === 'idle' || asyncState.status === 'loading' || asyncState.status === 'retrying') {
+    return <div className="page-fade"><AcademicDataSkeleton label="Loading workspace" /></div>;
+  }
+
+  if (asyncState.status === 'error') {
+    return (
+      <div className="page-fade">
+        <AcademicDataErrorBanner
+          message={asyncState.error?.userMessage || asyncState.error?.message || 'Your academic records could not be synchronized.'}
+          actionSuggestion={asyncState.error?.actionSuggestion}
+          onRetry={() => { void refreshAll(); }}
+        />
+      </div>
+    );
+  }
 
   return <div className="page-fade">{content[view]}</div>;
 }

@@ -1,13 +1,17 @@
 # context.md — LunaLearn Full-Stack Integration & Architecture Status
 
-Updated following the complete frontend, backend, AI/RAG, and design system integration passes. LunaLearn is fully wired end-to-end with zero open blockers. Both the backend (`http://localhost:4000`) and frontend (`http://localhost:3000`) run concurrently and communicate seamlessly.
+> **LIVING SOURCE OF TRUTH (MANDATORY UPDATE RULE):**  
+> Per project rule (`.agents/rules/always-update-context.md`), this file must **always be updated** on every code change, feature integration, bug fix, upstream merge, or environment transition.
 
 ---
 
 ## 1. Executive Summary & System Health
 
-- **Frontend Compilation:** `next build` passes cleanly (`Compiled successfully`), 18/18 static pages prerendered, 0 type or lint errors.
-- **Backend Type Safety & Lint:** `tsc --noEmit` passes with 0 type errors; test suite (`npm test`) passes across auth, crud, engine, planner, rag, assistant, quiz, and reactive loops.
+- **Current Runtime Status:**
+  - **Backend Server:** Running on `http://localhost:4000` (`npm run dev`). Health checks, auth, CRUD, RAG, and planning endpoints active.
+  - **Frontend Client:** Running on `http://localhost:3000` (`npm run dev`). Dashboard, workspace, and all 18 pages serve `HTTP 200 OK`.
+- **Frontend Build & Types:** `next build` passes cleanly (`Compiled successfully`), 18/18 static pages prerendered with 0 type errors and 0 lint warnings.
+- **Backend Build & Tests:** `npm run typecheck` (`tsc --noEmit`) passes with 0 errors. Full test suite (`npm test`) passes across all 10 suites (auth, CRUD, engine, planner, RAG Phase 1 & 2, assistant, quiz, and reactive feedback loop).
 - **Backend / Infra Blocker Status:** **RESOLVED.** The backend includes `LocalDevStore` (in-memory + file-backed at `backend/scratch/local-db.json`) which automatically activates when placeholder Supabase credentials are used, simulating full row-level security (RLS) and auth. Live Supabase is seamlessly used when real credentials are provided.
 - **AI/RAG Pipeline:** **ACTIVE & GROUNDED.** End-to-end PDF upload (`multipart/form-data`), text extraction (`pdf-parse`), vector embeddings (`Google Gemini`), semantic search, grounded AI assistant chat, and dynamic quiz generation are fully wired and verified.
 - **Design System:** **INTEGRATED.** "Midnight Lunar Library" (dark) and "Daylight Lavender" (light) design systems with smooth velvet transitions, CSS variables, `ThemeContext` persistence, and header `ThemeToggle`.
@@ -63,10 +67,10 @@ graph TD
 - Automatically detects placeholder credentials (`SUPABASE_URL=https://your-project-ref.supabase.co`) or network failures.
 - Emulates Supabase's fluent table API (`.from().select().eq().order()`, etc.) backed by `backend/scratch/local-db.json`.
 - Enforces user-scoped Row Level Security (RLS) and hierarchical parent-child ownership validation (e.g. users cannot manipulate topics under other users' subjects).
-- Pre-seeded with demo account:
+- Pre-seeded with canonical demo profile:
   - **Email:** `aarav.patel@example.com`
   - **Password:** `password123`
-  - **Subject:** Database Management Systems (DBMS)
+  - **Course:** Database Management Systems (DBMS)
 
 ### B. AI/RAG Pipeline (`backend/src/services/`)
 - **PDF Upload (`rag-material.service.ts`):** Parses binary multipart buffers via `busboy` and extracts plaintext using `pdf-parse`.
@@ -78,11 +82,21 @@ graph TD
 - **Themes:** "Midnight Lunar Library" (default cozy dark mode) and "Daylight Lavender" (crisp light mode).
 - **Theme Provider:** `frontend/lib/context/ThemeContext.tsx` handles `localStorage` synchronization with zero hydration flicker.
 - **Toggle Component:** `frontend/components/ThemeToggle.tsx` provides an animated Sun/Moon toggle with celestial glows.
+- **Async Resilience:** Includes `AcademicDataSkeleton` and `AcademicDataErrorBanner` with graceful retry triggers.
 - **Spec Documentation:** Detailed design tokens and philosophy documented in `DESIGN.md` and `design-context.md`.
 
 ---
 
-## 5. Verification & Audit History
+## 5. Development Notes & Troubleshooting
+
+### Next.js Dev Server vs. Production Build Cache
+- When running `npm run build` followed by `npm run dev`, older client browser tabs may request outdated chunk hashes (e.g. `_next/static/chunks/main-app.js?v=...`), resulting in momentary 404s in the dev console until the tab refreshes.
+- Hard-refreshing the browser (`Ctrl+F5` or `Cmd+Shift+R`) loads the newly compiled dev modules immediately.
+- If necessary, clearing `.next/` (`rm -rf .next` or `Remove-Item -Recurse -Force .next`) resets all cached chunks.
+
+---
+
+## 6. Verification & Audit History
 
 1. **Backend Domain CRUD & Security Audit:**
    - Script: `backend/src/scripts/comprehensive-audit.ts`
@@ -96,7 +110,7 @@ graph TD
 
 ---
 
-## 6. How to Run Locally
+## 7. How to Run Locally
 
 ### Running the Backend:
 ```bash

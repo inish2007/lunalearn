@@ -1,5 +1,4 @@
 import type { Metadata } from 'next';
-import { CountUpAll } from '@/components/Ui';
 import { AcademicProvider } from '@/lib/context/AcademicContext';
 import { ThemeProvider } from '@/lib/context/ThemeContext';
 import './globals.css';
@@ -22,7 +21,6 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       <body className="min-h-screen bg-canvas text-ink antialiased selection:bg-accent/30 selection:text-ink">
         <ThemeProvider>
           <AcademicProvider>
-            <CountUpAll />
             {children}
           </AcademicProvider>
         </ThemeProvider>

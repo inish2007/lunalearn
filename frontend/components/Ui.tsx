@@ -1,50 +1,6 @@
 'use client';
-import { useEffect } from 'react';
 import { ArrowUpRight, CheckCircle2, ChevronRight, CircleAlert, Clock3, RefreshCw, Sparkles } from 'lucide-react';
 export { default as CountUp } from './CountUp';
-
-export function CountUpAll() {
-  useEffect(() => {
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-    const animate = () => {
-      const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
-        acceptNode(node) {
-          const parent = node.parentElement;
-          return parent && !parent.closest('script,style,textarea,option,[data-count-up]') && /\d/.test(node.nodeValue || '')
-            ? NodeFilter.FILTER_ACCEPT
-            : NodeFilter.FILTER_REJECT;
-        }
-      });
-      const nodes: Text[] = [];
-      while (walker.nextNode()) nodes.push(walker.currentNode as Text);
-      nodes.forEach(node => {
-        const original = node.nodeValue || '';
-        const values = Array.from(original.matchAll(/\d[\d,]*/g));
-        if (!values.length) return;
-        const targets = values.map(match => Number(match[0].replace(/,/g, '')));
-        const render = (progress: number) => {
-          let index = 0;
-          node.nodeValue = original.replace(/\d[\d,]*/g, match => {
-            const target = targets[index++];
-            const value = Math.round(target * (1 - Math.pow(1 - progress, 3)));
-            return match.includes(',') ? value.toLocaleString('en-US') : String(value);
-          });
-        };
-        render(0);
-        const started = performance.now();
-        const tick = (now: number) => {
-          const progress = Math.min((now - started) / 1000, 1);
-          render(progress);
-          if (progress < 1) requestAnimationFrame(tick);
-        };
-        requestAnimationFrame(tick);
-      });
-    };
-    const frame = requestAnimationFrame(animate);
-    return () => cancelAnimationFrame(frame);
-  }, []);
-  return null;
-}
 
 export function PageHeader({
   eyebrow,
@@ -78,9 +34,10 @@ export function Card({ children, className = '' }: { children: React.ReactNode; 
 }
 
 export function Progress({ value, color = 'bg-primary' }: { value: number; color?: string }) {
+  const safeValue = Number.isFinite(value) ? Math.max(0, Math.min(100, value)) : 0;
   return (
-    <div className="h-2 overflow-hidden rounded-full bg-highlight/30 dark:bg-highlight/15">
-      <div className={`progress-fill h-full rounded-full ${color}`} style={{ width: `${value}%` }} />
+    <div role="progressbar" aria-label="Progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={safeValue} className="h-2 overflow-hidden rounded-full bg-highlight/30 dark:bg-highlight/15">
+      <div className={`progress-fill h-full rounded-full ${color}`} style={{ width: `${safeValue}%` }} />
     </div>
   );
 }

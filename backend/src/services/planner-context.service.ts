@@ -34,11 +34,12 @@ export class PlannerContextService {
     const now = new Date();
 
     // 1. Fetch Student Profile & Study Settings
-    const { data: profile } = await client
+    const { data: profile, error: profileError } = await client
       .from('profiles')
       .select('*')
       .eq('id', userId)
       .maybeSingle();
+    if (profileError) throw AppError.internal('Could not load profile', profileError);
 
     const studySettings: StudyTimeSettings = {
       preferred_focus_time: profile?.preferred_focus_time || 'Evening (5:00 PM - 8:00 PM)',
@@ -59,7 +60,8 @@ export class PlannerContextService {
       subjectQuery = subjectQuery.eq('id', filterSubjectId);
     }
 
-    const { data: subjects } = await subjectQuery;
+    const { data: subjects, error: subjectsError } = await subjectQuery;
+    if (subjectsError) throw AppError.internal('Could not load subjects', subjectsError);
     const subjectList = subjects || [];
 
     // 3. Assemble per-subject planner context
@@ -67,10 +69,11 @@ export class PlannerContextService {
 
     for (const sub of subjectList) {
       // Units for topic lookup
-      const { data: units } = await client
+      const { data: units, error: unitsError } = await client
         .from('units')
         .select('id, title')
         .eq('subject_id', sub.id);
+    if (unitsError) throw AppError.internal('Could not load units', unitsError);
 
       const unitMap = new Map<string, string>();
       const unitIds: string[] = [];
@@ -82,10 +85,11 @@ export class PlannerContextService {
       // Topics: weak or unfinished
       let weakAndUnfinishedTopics: TopicSummary[] = [];
       if (unitIds.length > 0) {
-        const { data: topicData } = await client
+        const { data: topicData, error: topicDataError } = await client
           .from('topics')
           .select('*')
           .in('unit_id', unitIds);
+    if (topicDataError) throw AppError.internal('Could not load topicData', topicDataError);
 
         const allTopics = topicData || [];
         weakAndUnfinishedTopics = allTopics
@@ -103,11 +107,12 @@ export class PlannerContextService {
       }
 
       // Exams
-      const { data: examsData } = await client
+      const { data: examsData, error: examsDataError } = await client
         .from('exams')
         .select('*')
         .eq('subject_id', sub.id)
         .order('exam_date', { ascending: true });
+    if (examsDataError) throw AppError.internal('Could not load examsData', examsDataError);
 
       const exams: SubjectExamSummary[] = (examsData || []).map((e: any) => {
         const diffMs = new Date(e.exam_date).getTime() - now.getTime();
@@ -122,12 +127,13 @@ export class PlannerContextService {
       });
 
       // Pending tasks
-      const { data: taskData } = await client
+      const { data: taskData, error: taskDataError } = await client
         .from('tasks')
         .select('*')
         .eq('subject_id', sub.id)
         .eq('is_completed', false)
         .order('due_date', { ascending: true });
+    if (taskDataError) throw AppError.internal('Could not load taskData', taskDataError);
 
       const pendingTasks: TaskSummary[] = (taskData || []).map((t: any) => {
         let daysUntilDue: number | null = null;
@@ -147,12 +153,13 @@ export class PlannerContextService {
       });
 
       // Recent quiz performance
-      const { data: quizData } = await client
+      const { data: quizData, error: quizDataError } = await client
         .from('quiz_results')
         .select('*')
         .eq('subject_id', sub.id)
         .order('created_at', { ascending: false })
         .limit(5);
+    if (quizDataError) throw AppError.internal('Could not load quizData', quizDataError);
 
       const recentQuizzes: QuizPerformanceSummary[] = (quizData || []).map((q: any) => ({
         id: q.id,
@@ -183,12 +190,13 @@ export class PlannerContextService {
     }
 
     // 4. Fetch general/unassigned tasks
-    const { data: unassignedData } = await client
+    const { data: unassignedData, error: unassignedDataError } = await client
       .from('tasks')
       .select('*')
       .is('subject_id', null)
       .eq('is_completed', false)
       .order('due_date', { ascending: true });
+    if (unassignedDataError) throw AppError.internal('Could not load unassignedData', unassignedDataError);
 
     const unassignedPendingTasks: TaskSummary[] = (unassignedData || []).map((t: any) => {
       let daysUntilDue: number | null = null;

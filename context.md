@@ -138,3 +138,5 @@ Actual local PDF bytes now persist, with scoped path checks and authenticated co
 ### Phase 3: assistant Markdown, material scope, preserved PDF citations, and truthful circuit-breaker fallback implemented. OCR design saved in docs/OCR-PLAN.md only. Markdown libraries added; raw HTML disabled.
 
 ### Phase 4: quizzes now require indexed material, use full bounded source chunks, difficulty and history checks, validate source references and exact question sets. Persisted runs score server-held answers through an atomic submit RPC/local equivalent. Provider failure returns an explicit error, never canned questions. Apply 20261006000001_quiz_runs.sql for live Supabase. Live Gemini verification pending.
+
+### Phase 5: failed dataset reads now display named errors instead of empty success. Engine/planner reads propagate errors. Minute/focus refresh preserves mounted views during background loading; numeric DOM animation removed; progress bars clamp and expose accessible values. Genuine low readiness remains visible.

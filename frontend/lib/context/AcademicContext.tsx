@@ -167,7 +167,7 @@ export function AcademicProvider({ children }: { children: React.ReactNode }) {
     abortControllerRef.current = controller;
     const signal = controller.signal;
 
-    setAsyncState(prev => ({
+    setAsyncState(prev => prev.data ? prev : ({
       status: prev.status === 'error' ? 'retrying' : 'loading',
       data: prev.data
     }));
@@ -185,38 +185,14 @@ export function AcademicProvider({ children }: { children: React.ReactNode }) {
         fetchedPlanner,
         meData
       ] = await Promise.all([
-        api.subjects.list(signal).catch(err => {
-          if (err.name === 'AbortError') throw err;
-          return [] as Subject[];
-        }),
-        api.tasks.list(undefined, signal).catch(err => {
-          if (err.name === 'AbortError') throw err;
-          return [] as Task[];
-        }),
-        api.exams.list(undefined, signal).catch(err => {
-          if (err.name === 'AbortError') throw err;
-          return [] as Exam[];
-        }),
-        api.materials.list(undefined, signal).catch(err => {
-          if (err.name === 'AbortError') throw err;
-          return [] as Material[];
-        }),
-        api.academic.getAllReadiness(signal).catch(err => {
-          if (err.name === 'AbortError') throw err;
-          return [] as SubjectReadiness[];
-        }),
-        api.academic.getAllRisks(signal).catch(err => {
-          if (err.name === 'AbortError') throw err;
-          return [] as AcademicRisk[];
-        }),
-        api.planner.getContext(undefined, signal).catch(err => {
-          if (err.name === 'AbortError') throw err;
-          return null as PlannerContextResponse | null;
-        }),
-        api.auth.me(signal).catch(err => {
-          if (err.name === 'AbortError') throw err;
-          return null;
-        })
+        api.subjects.list(signal).catch(err => { if (err.name === 'AbortError') throw err; throw new ClientAppError({ message: 'Could not load subjects: ' + err.message, userMessage: 'Could not load subjects. Please retry.', retryable: true }); }),
+        api.tasks.list(undefined, signal).catch(err => { if (err.name === 'AbortError') throw err; throw new ClientAppError({ message: 'Could not load tasks: ' + err.message, userMessage: 'Could not load tasks. Please retry.', retryable: true }); }),
+        api.exams.list(undefined, signal).catch(err => { if (err.name === 'AbortError') throw err; throw new ClientAppError({ message: 'Could not load exams: ' + err.message, userMessage: 'Could not load exams. Please retry.', retryable: true }); }),
+        api.materials.list(undefined, signal).catch(err => { if (err.name === 'AbortError') throw err; throw new ClientAppError({ message: 'Could not load materials: ' + err.message, userMessage: 'Could not load materials. Please retry.', retryable: true }); }),
+        api.academic.getAllReadiness(signal).catch(err => { if (err.name === 'AbortError') throw err; throw new ClientAppError({ message: 'Could not load readiness: ' + err.message, userMessage: 'Could not load readiness. Please retry.', retryable: true }); }),
+        api.academic.getAllRisks(signal).catch(err => { if (err.name === 'AbortError') throw err; throw new ClientAppError({ message: 'Could not load risks: ' + err.message, userMessage: 'Could not load risks. Please retry.', retryable: true }); }),
+        api.planner.getContext(undefined, signal).catch(err => { if (err.name === 'AbortError') throw err; throw new ClientAppError({ message: 'Could not load planner: ' + err.message, userMessage: 'Could not load planner. Please retry.', retryable: true }); }),
+        api.auth.me(signal).catch(err => { if (err.name === 'AbortError') throw err; throw new ClientAppError({ message: 'Could not load profile: ' + err.message, userMessage: 'Could not load profile. Please retry.', retryable: true }); })
       ]);
 
       if (signal.aborted) return;
@@ -293,6 +269,13 @@ export function AcademicProvider({ children }: { children: React.ReactNode }) {
       }));
     }
   }, []);
+
+  useEffect(() => {
+    const refresh = () => { if (document.visibilityState === 'visible' && getStoredToken()) void refreshAll(); };
+    window.addEventListener('focus', refresh);
+    const timer = window.setInterval(refresh, 60000);
+    return () => { window.removeEventListener('focus', refresh); window.clearInterval(timer); };
+  }, [refreshAll]);
 
   const loadUnitsAndTopics = useCallback(async (subjectId: string) => {
     try {

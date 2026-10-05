@@ -210,12 +210,7 @@ export function Dashboard() {
   const primarySubjectId = nearestExam?.subject_id || subjects[0]?.id;
   const primarySubject = subjects.find(s => s.id === primarySubjectId) || subjects[0];
   const primaryReadiness = readinessMap[primarySubjectId];
-  const hasCalculableReadiness =
-    primaryReadiness &&
-    typeof primaryReadiness.readiness_percentage === 'number' &&
-    (primaryReadiness.breakdown.topic_completion > 0 ||
-      primaryReadiness.breakdown.quiz_performance > 0 ||
-      primaryReadiness.breakdown.revision_activity > 0);
+  const hasCalculableReadiness = Boolean(primaryReadiness && typeof primaryReadiness.readiness_percentage === 'number');
 
   // Incomplete priority tasks
   const pendingTasks = tasks.filter(t => !t.is_completed);

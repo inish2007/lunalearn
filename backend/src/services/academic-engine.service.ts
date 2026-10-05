@@ -1,3 +1,4 @@
+import { AppError } from '../types/errors.js';
 import { SupabaseClient } from '@supabase/supabase-js';
 import { Database, AcademicRisk, ReadinessBreakdown, SubjectReadiness } from '../types/database.js';
 
@@ -68,43 +69,48 @@ export class AcademicEngineService {
   ): Promise<SubjectReadiness> {
     const client = db as any;
     // 1. Fetch units for this subject
-    const { data: units } = await client
+    const { data: units, error: unitsError } = await client
       .from('units')
       .select('id')
       .eq('subject_id', subjectId);
+    if (unitsError) throw AppError.internal('Could not load units', unitsError);
 
     const unitIds = (units || []).map((u: any) => u.id);
 
     // 2. Fetch topics
     let topics: { status: string; is_weak: boolean; title: string }[] = [];
     if (unitIds.length > 0) {
-      const { data: topicData } = await client
+      const { data: topicData, error: topicDataError } = await client
         .from('topics')
         .select('status, is_weak, title')
         .in('unit_id', unitIds);
+    if (topicDataError) throw AppError.internal('Could not load topicData', topicDataError);
       topics = topicData || [];
     }
 
     // 3. Fetch quiz results
-    const { data: quizData } = await client
+    const { data: quizData, error: quizDataError } = await client
       .from('quiz_results')
       .select('score')
       .eq('subject_id', subjectId)
       .order('created_at', { ascending: false })
       .limit(10);
+    if (quizDataError) throw AppError.internal('Could not load quizData', quizDataError);
 
     // 4. Fetch study sessions (recent revision/focus)
-    const { data: sessionData } = await client
+    const { data: sessionData, error: sessionDataError } = await client
       .from('study_sessions')
       .select('duration_minutes, session_type, started_at')
       .eq('subject_id', subjectId);
+    if (sessionDataError) throw AppError.internal('Could not load sessionData', sessionDataError);
 
     // 5. Fetch assignments
-    const { data: taskData } = await client
+    const { data: taskData, error: taskDataError } = await client
       .from('tasks')
       .select('is_completed, type')
       .eq('subject_id', subjectId)
       .eq('type', 'Assignment');
+    if (taskDataError) throw AppError.internal('Could not load taskData', taskDataError);
 
     const now = new Date();
     const windowStart = new Date(now.getTime() - 7 * 86400000);
@@ -146,10 +152,11 @@ export class AcademicEngineService {
     db: SupabaseClient<Database>
   ): Promise<SubjectReadiness[]> {
     const client = db as any;
-    const { data: subjects } = await client
+    const { data: subjects, error: subjectsError } = await client
       .from('subjects')
       .select('id')
       .order('created_at', { ascending: true });
+    if (subjectsError) throw AppError.internal('Could not load subjects', subjectsError);
 
     if (!subjects || subjects.length === 0) return [];
 
@@ -178,37 +185,42 @@ export class AcademicEngineService {
     const now = new Date();
 
     // 1. Fetch exams for subject
-    const { data: exams } = await client
+    const { data: exams, error: examsError } = await client
       .from('exams')
       .select('*')
       .eq('subject_id', subjectId);
+    if (examsError) throw AppError.internal('Could not load exams', examsError);
 
     // Fetch topics if not supplied
     let topics = cachedTopics;
     if (!topics) {
-      const { data: units } = await client.from('units').select('id').eq('subject_id', subjectId);
+      const { data: units, error: unitsError } = await client.from('units').select('id').eq('subject_id', subjectId);
+    if (unitsError) throw AppError.internal('Could not load units', unitsError);
       const unitIds = (units || []).map((u: any) => u.id);
       if (unitIds.length > 0) {
-        const { data: topicData } = await client.from('topics').select('status, is_weak, title').in('unit_id', unitIds);
+        const { data: topicData, error: topicDataError } = await client.from('topics').select('status, is_weak, title').in('unit_id', unitIds);
+    if (topicDataError) throw AppError.internal('Could not load topicData', topicDataError);
         topics = topicData || [];
       } else {
         topics = [];
       }
     }
     // 2. Fetch tasks for subject
-    const { data: tasks } = await client
+    const { data: tasks, error: tasksError } = await client
       .from('tasks')
       .select('*')
       .eq('subject_id', subjectId)
       .eq('is_completed', false);
+    if (tasksError) throw AppError.internal('Could not load tasks', tasksError);
 
     // 3. Fetch recent quiz scores
-    const { data: quizResults } = await client
+    const { data: quizResults, error: quizResultsError } = await client
       .from('quiz_results')
       .select('score, created_at')
       .eq('subject_id', subjectId)
       .order('created_at', { ascending: false })
       .limit(5);
+    if (quizResultsError) throw AppError.internal('Could not load quizResults', quizResultsError);
 
     // RULE 1: HIGH_EXAM_RISK
     // An exam is 7 or fewer days away AND 2 or more topics are unfinished or weak
@@ -343,9 +355,10 @@ export class AcademicEngineService {
     db: SupabaseClient<Database>
   ): Promise<AcademicRisk[]> {
     const client = db as any;
-    const { data: subjects } = await client
+    const { data: subjects, error: subjectsError } = await client
       .from('subjects')
       .select('id');
+    if (subjectsError) throw AppError.internal('Could not load subjects', subjectsError);
 
     const allRisks: AcademicRisk[] = [];
 
@@ -358,11 +371,12 @@ export class AcademicEngineService {
 
     // Also check student-wide standalone task workload conflicts
     const now = new Date();
-    const { data: unassignedTasks } = await client
+    const { data: unassignedTasks, error: unassignedTasksError } = await client
       .from('tasks')
       .select('*')
       .is('subject_id', null)
       .eq('is_completed', false);
+    if (unassignedTasksError) throw AppError.internal('Could not load unassignedTasks', unassignedTasksError);
 
     if (unassignedTasks && unassignedTasks.length > 0) {
       for (const task of unassignedTasks) {

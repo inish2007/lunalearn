@@ -132,7 +132,7 @@ export type UpdateTaskInput = z.infer<typeof UpdateTaskSchema>;
 export const CreateExamSchema = z.object({
   subject_id: z.string().uuid({ message: 'Valid subject_id UUID is required' }),
   title: z.string().min(1, { message: 'Exam title is required' }).max(200),
-  exam_date: z.string().datetime({ message: 'exam_date must be an ISO 8601 timestamp' }),
+  exam_date: z.string().datetime({ message: 'exam_date must be an ISO 8601 timestamp' }).refine(value => Date.parse(value) > Date.now(), 'Exam date must be in the future.'),
   target_score: z.number().min(0).max(100).default(80)
 });
 
@@ -140,7 +140,7 @@ export type CreateExamInput = z.infer<typeof CreateExamSchema>;
 
 export const UpdateExamSchema = z.object({
   title: z.string().min(1).max(200).optional(),
-  exam_date: z.string().datetime().optional(),
+  exam_date: z.string().datetime().refine(value => Date.parse(value) > Date.now(), 'Exam date must be in the future.').optional(),
   target_score: z.number().min(0).max(100).optional()
 }).refine(data => Object.keys(data).length > 0, { message: 'At least one field must be provided to update' });
 

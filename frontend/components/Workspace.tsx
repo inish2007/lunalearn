@@ -1,5 +1,6 @@
 'use client';
 import { StudyActivity } from './StudyActivity';
+import { examCountdown } from '@/lib/dates';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { AssistantSourceChunk } from '@/lib/types/academic';
@@ -1429,6 +1430,7 @@ function Exams() {
   const [showExamModal, setShowExamModal] = useState(false);
   const [examTitle, setExamTitle] = useState('');
   const [examSubId, setExamSubId] = useState('');
+  const [examError, setExamError] = useState('');
   const [examDate, setExamDate] = useState('');
   const [targetScore, setTargetScore] = useState(85);
 
@@ -1437,6 +1439,8 @@ function Exams() {
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!examTitle.trim() || !examSubId || !examDate) return;
+    setExamError('');
+    try {
     await createExam({
       subject_id: examSubId,
       title: examTitle.trim(),
@@ -1445,6 +1449,7 @@ function Exams() {
     });
     setExamTitle('');
     setShowExamModal(false);
+    } catch (err) { setExamError(err instanceof Error ? err.message : 'Could not save exam'); }
   };
 
   return (
@@ -1511,7 +1516,7 @@ function Exams() {
                   <div>
                     <div className="flex items-center justify-between">
                       <p className="text-xs font-bold uppercase tracking-wider text-primary">
-                        {daysAway >= 0 ? `${daysAway} days remaining` : 'Exam completed'} ·{' '}
+                        {examCountdown(e.exam_date)} ·{' '}
                         {new Date(e.exam_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                       </p>
                       <button
@@ -1573,6 +1578,7 @@ function Exams() {
         </div>
       )}
 
+      {examError && <p role="alert" className="text-red-600">{examError}</p>}
       {showExamModal && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4 backdrop-blur-sm">
           <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl">

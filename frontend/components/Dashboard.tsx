@@ -1,4 +1,5 @@
 'use client';
+import { examCountdown } from '@/lib/dates';
 import { ReadinessDetails } from './ReadinessDetails';
 
 import { useState } from 'react';
@@ -195,7 +196,7 @@ export function Dashboard() {
 
   // Nearest upcoming exam calculation
   const now = new Date();
-  const sortedExams = [...exams].sort(
+  const sortedExams = exams.filter(e => Date.parse(e.exam_date) >= now.getTime()).sort(
     (a, b) => new Date(a.exam_date).getTime() - new Date(b.exam_date).getTime()
   );
   const nearestExam = sortedExams[0];
@@ -360,7 +361,7 @@ export function Dashboard() {
                       <p className="text-xs font-bold uppercase tracking-wider text-muted">Exam readiness</p>
                       <h2 className="mt-1 text-xl font-black">{nearestExam.title}</h2>
                       <p className="mt-1 text-sm text-muted">
-                        {nearestExamDaysAway} day{nearestExamDaysAway === 1 ? '' : 's'} remaining
+                        {nearestExam && examCountdown(nearestExam.exam_date)}
                       </p>
                     </div>
                     <div className="pulse-ring grid h-24 w-24 place-items-center rounded-full border-[9px] border-highlight bg-surface">
@@ -447,7 +448,7 @@ export function Dashboard() {
               </div>
             ) : (
               <div className="space-y-3">
-                {exams.map(e => {
+                {sortedExams.map(e => {
                   const sub = subjects.find(s => s.id === e.subject_id);
                   const diffMs = new Date(e.exam_date).getTime() - now.getTime();
                   const daysAway = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
@@ -458,7 +459,7 @@ export function Dashboard() {
                       <div className="flex justify-between">
                         <p className="text-sm font-bold truncate pr-2">{e.title}</p>
                         <span className="text-xs font-bold text-primary shrink-0">
-                          {daysAway}d
+                          {examCountdown(e.exam_date)}
                         </span>
                       </div>
                       <p className="mt-1 text-xs text-muted">

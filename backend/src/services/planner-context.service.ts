@@ -114,7 +114,7 @@ export class PlannerContextService {
         .order('exam_date', { ascending: true });
     if (examsDataError) throw AppError.internal('Could not load examsData', examsDataError);
 
-      const exams: SubjectExamSummary[] = (examsData || []).map((e: any) => {
+      const exams: SubjectExamSummary[] = (examsData || []).filter((e: any) => Date.parse(e.exam_date) >= now.getTime()).map((e: any) => {
         const diffMs = new Date(e.exam_date).getTime() - now.getTime();
         const daysUntil = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
         return {
@@ -249,7 +249,7 @@ export class PlannerContextService {
         }
 
         const requiredHours = topics.reduce((total, topic) => total + (topic.estimated_study_hours ?? 0), 0);
-        const availableHours = availableHoursPerDay * exam.days_until_exam;
+        const availableHours = Math.min(availableHoursPerDay * Math.max(1, exam.days_until_exam), Math.max(0, (Date.parse(exam.exam_date) - Date.now()) / 3600000));
         if (requiredHours > availableHours) {
           throw AppError.constraintConflict(
             `Preparing for "${exam.title}" requires ${requiredHours.toFixed(1)} study hours across weak or unfinished topics, but only ${availableHours.toFixed(1)} hours are available before the exam. Increase your daily study availability or revise topic estimates before generating a plan.`

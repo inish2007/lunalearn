@@ -234,7 +234,7 @@ export class AcademicEngineService {
         const diffMs = examDate.getTime() - now.getTime();
         const daysAway = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
 
-        if (daysAway >= 0 && daysAway <= 7 && incompleteOrWeakTopics.length >= 2) {
+        if (diffMs >= 0 && daysAway <= 7 && incompleteOrWeakTopics.length >= 2) {
           const weakNames = incompleteOrWeakTopics.slice(0, 3).map(t => t.title).join(', ');
           risks.push({
             type: 'HIGH_EXAM_RISK',

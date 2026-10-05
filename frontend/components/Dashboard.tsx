@@ -1,4 +1,5 @@
 'use client';
+import { ReadinessDetails } from './ReadinessDetails';
 
 import { useState } from 'react';
 import Link from 'next/link';
@@ -275,6 +276,7 @@ export function Dashboard() {
             </div>
           </div>
 
+          <ReadinessDetails readiness={primaryReadiness} />
           {/* Subject Progress List */}
           <Card>
             <div className="mb-4 flex items-center justify-between">

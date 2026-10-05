@@ -96,7 +96,7 @@ export class AcademicEngineService {
     // 4. Fetch study sessions (recent revision/focus)
     const { data: sessionData } = await client
       .from('study_sessions')
-      .select('duration_minutes, session_type')
+      .select('duration_minutes, session_type, started_at')
       .eq('subject_id', subjectId);
 
     // 5. Fetch assignments
@@ -106,10 +106,24 @@ export class AcademicEngineService {
       .eq('subject_id', subjectId)
       .eq('type', 'Assignment');
 
+    const now = new Date();
+    const windowStart = new Date(now.getTime() - 7 * 86400000);
+    const recentSessions = (sessionData || []).filter((s: any) => {
+      const started = new Date(s.started_at).getTime();
+      return started >= windowStart.getTime() && started <= now.getTime();
+    });
+    const basis = {
+      topics: { completed: topics.filter(t => t.status === 'completed').length, total: topics.length },
+      quizzes: { count: (quizData || []).length, limit: 10 },
+      revision: { minutes: recentSessions.reduce((sum: number, s: any) => sum + Math.max(0, s.duration_minutes || 0), 0), benchmark_minutes: 120, window_start: windowStart.toISOString(), window_end: now.toISOString() },
+      assignments: { completed: (taskData || []).filter((t: any) => t.is_completed).length, total: (taskData || []).length },
+      weights: { topic_completion: .4, quiz_performance: .3, revision_activity: .2, assignment_completion: .1 },
+      calculated_at: now.toISOString()
+    };
     const breakdown: ReadinessBreakdown = {
       topic_completion: this.calculateTopicCompletion(topics),
       quiz_performance: this.calculateQuizPerformance(quizData || []),
-      revision_activity: this.calculateRevisionActivity(sessionData || []),
+      revision_activity: this.calculateRevisionActivity(recentSessions),
       assignment_completion: this.calculateAssignmentCompletion(taskData || [])
     };
 
@@ -120,6 +134,7 @@ export class AcademicEngineService {
       subject_id: subjectId,
       readiness_percentage,
       breakdown,
+      basis,
       risks
     };
   }

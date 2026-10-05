@@ -1,88 +1,102 @@
-# LunaLearn — Layered Build Plan (Foundation → Top)
+# LunaLearn real-data repair and product improvement plan
 
-Reorganizes the 8-hour plan by dependency layer so all 3 people can work in
-parallel without blocking each other.
+Approved 2026-10-06. Implement phases 1–14 in this order, one commit per phase. Update context.md after each phase and CONTRACTS.md with every shared interface change. OCR (phase 3) and natural-language commands (phase 13) remain plans only. Preserve auth/RLS, local/Supabase parity, themes, and the canonical DBMS demo. Additive migrations only; no merge or deployment. The original layer guide is preserved in layered-build-plan.md (Windows filenames are case-insensitive).
 
-Legend: P1 = Frontend, P2 = Backend/Academic Engine, P3 = AI/RAG
+## 1. Explain readiness
+Owners: backend/src/services/academic-engine.service.ts — calculateWeightedReadiness, calculateTopicCompletion, calculateQuizPerformance, calculateRevisionActivity, calculateAssignmentCompletion, getSubjectReadiness; frontend/components/Workspace.tsx — Exams; frontend/components/Dashboard.tsx — Dashboard.
+Cause: percentages omit input counts; revision says weekly but includes all sessions.
+Fix: keep rounded component formulas: completed/all topics (empty=0), mean latest 10 quizzes (empty=0), min(100, minutes/120*100), completed/all Assignment tasks (empty=100); weighted total = round(.4T+.3Q+.2R+.1A). Change revision to started_at within rolling seven days, excluding future sessions. Add basis counts, window, weights and timestamp to readiness and planner types; reusable UI explains counts/defaults and links to study actions.
 
-## Layer 0 — Foundation (Infra & Scaffolding)
-Owner: P2 (lead), P1 (assist)
-- Next.js + TS + Tailwind project created
-- Supabase project connected, env vars set
-- Git repo, base layout, nav, route stubs: /dashboard /learning /tasks /exams
-  /materials /assistant /planner
-Depends on: nothing. Blocks: everything.
-Deliverable: app boots, routes resolve, Supabase client connects.
+## 2. PDF preview
+Owners: Workspace.Materials/submitUpload; AcademicContext.uploadMaterialPdf; RagMaterialService.processAndIndexPdf; StorageService.uploadPdf/writeLocalFallback; LocalDevStore.createClient; handleDomainRoutes.
+Cause: no open action/content route; local storage discards upload bytes and returns a dummy PDF; filesystem errors are swallowed.
+Fix: real local bytes, honest live-storage errors, authenticated GET /api/materials/:id/content from owned metadata with safe path containment. In-app browser PDF dialog via authenticated Blob fetch: loading/error, close/download, page fragments, URL cleanup. Missing old originals require re-upload.
 
-## Layer 1 — Data Schema
-Owner: P2
-- Tables: profiles, subjects, units, topics, tasks, exams, materials,
-  document_chunks, quiz_results, study_sessions
-- pgvector enabled on document_chunks
-Depends on: L0. Blocks: L2, L3, L5.
-Deliverable: schema migrated, tables exist.
+## 3. Assistant formatting and OCR plan
+Owners: Workspace.Assistant/send; StudyAssistantService.askAssistant/buildSystemPrompt/callGeminiWithResilience; PdfService.extractText; RagMaterialService.processAndIndexPdf.
+Cause: raw JSX text, discarded sources, fallback falsely marked as Gemini; pdf-parse cannot OCR.
+Implement safe Markdown headings/lists/emphasis/code without raw HTML or unsafe schemes; plain user messages; source links to PDF pages, material scope, truthful fallback.
+OCR DOCUMENTATION ONLY: page-level local OCR adapter after text-quality detection, bounded rendering/work, cancellation and job states; per-page provenance, mixed-document deduplication, retained original; tests for scanned/mixed/rotated/blank/unreadable pages. No OCR runtime/dependencies.
 
-## Layer 2 — Authentication
-Owner: P2 (logic/API), P1 (login/signup UI)
-- Sign up, login, logout, protected dashboard, basic profile
-Depends on: L1. Blocks: everything past this point.
-Deliverable: user can sign up, log in, reach /dashboard.
+## 4. Real material-grounded quizzes
+Owners: QuizService.generateQuiz/generateQuestionsWithGemini/buildQuizPrompt/parseGeminiQuizJson/generateOfflineQuestions/scoreAndSubmitQuiz; CircuitBreaker.execute; backend/src/types/quiz.ts; quiz.routes.ts; Workspace.Quizzes/beginQuiz/submitQuiz; frontend/lib/api.ts.
+Causes: fallback mislabeled; 250-character excerpts; repeated topic/low sampling/no history; positional citations; silent syllabus mode; client answer keys; failed result inserts reported successful.
+Fix: require usable material, actionable INSUFFICIENT_DATA; bounded full chunks; material/topic/count/difficulty controls. Adaptive difficulty: <60 easy, 60–79 medium, >=80 hard, no history medium. Persist runs and authoritative answers/fingerprints, exclude recent exact stems, validate question count/options/answers/topic ownership/source IDs, one bounded regeneration. Truthful model/is_fallback/notice; configuration failure for missing credentials; never generic canned questions in normal generation. Provider failure may return explicit grounded practice only if valid, otherwise error. Submit quiz_id+answers, durable idempotency, await weak-topic updates, fail on persistence errors.
 
-## Layer 3 — Core Domain CRUD + Dashboard Shell
-Owner: P2 (APIs), P1 (UI)
-- P2: CRUD APIs — subjects/units/topics/tasks/exams/materials
-- P1: Dashboard, Learning, Tasks, Exams, Materials pages (mock data first,
-  swap to live as APIs land)
-Depends on: L1, L2. Blocks: L4, L5, L6.
-Deliverable: user can add a subject/topic/exam/task and see it listed.
+## 5. Honest percentages
+Owners: Workspace.Learning/Exams/Analytics/Profile; Dashboard; AppShell; Ui.Progress/CountUpAll; AcademicProvider.refreshAll; AcademicEngineService.getSubjectReadiness.
+Causes: failures become empty/zero, low scores hidden, artificial XP minimum, global numeric DOM mutation.
+Fix: audit every percent; show unavailable versus zero, dataset-specific errors, query failure propagation, focus/minute refresh; clamp accessible Progress, remove CountUpAll. Sources: subject readiness=weighted engine; drivers=phase1; unit completion=completed/total; quiz=server correct/count; average=mean available subject readiness with sample count; target=student goal; XP=phase6 formula.
 
-## Layer 4 — Academic Engine (Readiness + Risk)
-Owner: P2
-- Readiness = TopicCompletion×40% + QuizPerformance×30% +
-  RevisionActivity×20% + AssignmentCompletion×10%
-- Risk rules: HIGH_EXAM_RISK, DEADLINE_RISK, PERFORMANCE_RISK,
-  WORKLOAD_RISK — every risk carries a reason, not just a label
-Depends on: L3. Blocks: Dashboard widgets (P1), Planner inputs (P3).
-Deliverable: API returns readiness % and reasoned risk alerts per subject.
+## 6. XP and sessions
+Owners: AppShell/Profile, database.ts profiles/study_sessions, handleDomainRoutes topic writes, QuizService.scoreAndSubmitQuiz. Cause: stored XP fields have no earning system; no session API/UI.
+Fix: authenticated session logging/history (subject/topic/type/start/end/notes), timestamp-derived duration; reject future, overlapping, nonpositive sessions. Immutable uniquely keyed XP events: first topic completion 50; first persisted quiz submission round(score/5); session floor(minutes/5), daily cap24; level=1+floor(total/500), progress=(total%500)/5. Server transactions and duplicate protection. Backfill real eligible activity once, exclude fabricated importer records and unverified legacy quiz results. Breakdown/history/next level UI and refresh derived data.
 
-## Layer 5 — Content Pipeline (PDF → RAG)
-Owner: P3
-- Upload → Storage → text extraction → chunking → embeddings → pgvector →
-  semantic search
-Depends on: L1 (tables), L3 (upload UI stub from P1). Blocks: L6.
-Deliverable: an uploaded PDF is searchable; a query returns relevant chunks.
+## 7. Dates
+Owners: CreateExamSchema/UpdateExamSchema, handleDomainRoutes exam mutations, Workspace.Exams/handleCreate, Dashboard, PlannerContextService.getPlannerContext/assertPlanFeasible.
+Cause: format-only validation and raw negative countdowns; past exam selected as upcoming.
+Fix: reject new/changed past timestamps with field message; preserve historical records and other-field edits; central passed/today/tomorrow/days display; upcoming filters; remaining usable same-day capacity.
 
-## Layer 6 — AI Study Assistant
-Owner: P3 (logic/prompting), P1 (chat UI)
-- Context per call: student info + subjects + topics + exam dates + tasks +
-  quiz results + retrieved chunks
-- Capabilities: explain, simplify, summarize, generate examples/questions/
-  quizzes, recommend next topic
-Depends on: L4, L5. Blocks: L7.
-Deliverable: assistant answers questions about an uploaded PDF, grounded in
-retrieved context.
+## 8. Tasks and exams depth
+Owners: Workspace.Tasks/Exams/handleCreate, AcademicContext CRUD, api.tasks.update/api.exams.update, handleDomainRoutes and schemas.
+Cause: available PATCH APIs lack UI.
+Fix: task edit/search/subject/type/priority filters/date-priority sort/Today-Upcoming-Overdue-Completed views; clear/reschedule deadlines/reopen tasks; pending/error states. Exam edit/upcoming-history/subject filter/targets, readiness basis, weak-topic checklist, scoped preparation links. Preserve optimistic concurrency. No recurrence, subtasks, reminder infrastructure or exam-specific syllabus tables.
 
-## Layer 7 — Adaptive Planner + Quiz
-Owner: P3 (generation), P1 (UI), P2 (feeds readiness/task data as inputs)
-- Quiz: 5 questions, scored, weak-topic detection
-- Planner: time-blocked "today's mission" from exam dates, weak/unfinished
-  topics, pending tasks, available time
-Depends on: L4, L6. Blocks: L8.
-Deliverable: a quiz score changes readiness; planner output changes when
-weak topics change.
+## 9. Simulator
+Owners: Workspace.Simulator; AcademicEngineService; PlannerContextService.
+Cause: slider only changes narrative, including false improvement at saturation.
+Fix: POST /api/planner/simulate accepts owned subject/topic hypothetical completion, extra minutes, availability; shared engine baseline/projected drivers/delta/required-available hours/feasibility/assumptions. No quiz improvement inferred, no writes, cap revision; actual logging separate.
 
-## Layer 8 — Integration & Polish (Top Layer)
-Owner: all three
-- Wire the full loop: dashboard → weak topic → assistant → quiz → updated
-  readiness → new mission
-- Responsive layout, loading/error/empty states, demo seed data, no console
-  errors
-Depends on: L0–L7.
-Deliverable: the Definition of Done flow works live for the DBMS demo.
+## 10. Settings
+Owners: Workspace.Settings; ThemeProvider/setTheme/applyTheme; UpdateProfileSettingsSchema; auth.routes profile PATCH; PlannerContextService; api.auth.
+Cause: theme works but profile/preferences inert, static Online claim, zero replaced by defaults.
+Fix: persisted validated name/course/semester/focus start-end/availability; profile+planner refresh. Browser-local theme labeled and validated, OS appearance wording, preserve zero; actual request state; saved/loading/errors. Focus window used by scheduling.
 
-## Cross-track handoff points (where parallel work stalls)
-- P1 can't wire real Dashboard data until P2 ships L3 APIs + L4 endpoint.
-- P3 can't start L5 until P2 ships materials/document_chunks (L1) and P1 has
-  an upload stub (L3).
-- P1's Assistant/Planner/Quiz UI can be built against mocks in parallel with
-  P3's L5–L7, then swapped to live calls at L8.
+## 11. Distinct Learning and Planner
+Owners: Workspace.Learning/Planner; AcademicContext.loadUnitsAndTopics/createTopic/updateTopic; PlannerContextService.getPlannerContext/assertPlanFeasible.
+Cause: planner first-three-subject slots/first task are not schedule; missing estimates ignored.
+Fix: Learning owns syllabus/completion/weakness/material/quiz feedback/estimates. Planner owns budgeted daily topic/task blocks with duration/reason/deadline/start/log. Deterministic shared scheduler prioritizes deadlines/imminent exams/weak/unfinished; student-entered task estimates, no invented durations; global capacity across subjects once; explicit missing-data/conflict states; focus window and actual sessions.
+
+## 12. Dashboard/calendar
+Owners: Dashboard, AcademicProvider.refreshAll and planner/task/exam feeds.
+Cause: generic mission and fragmented summaries; no calendar.
+Fix: top nearest upcoming exam/readiness basis/today time; main next block/prioritized tasks; side month calendar+agenda; lower subject progress/risks. Mobile single column. Events from exams, task deadlines, logged sessions and explicitly labeled generated blocks. Prev/next/Today/date selection/event links/task completion; honest empty dates; remove inert menus.
+
+## 13. Natural-language commands — PLAN ONLY
+Owners: StudyAssistantService.askAssistant, assistant.routes.ts and domain/material APIs. Cause: no intent dispatcher, organization is subjects/units not folders.
+Document future allowlisted typed commands, Gemini parsing, authenticated entity resolution, preview, existing-service execution. “show my DBMS notes” filters/navigates; “save this PDF to my Maths folder” requires selected file and resolves subject/unit. Clarify ambiguity, preview writes, idempotency/ownership, never execute document instructions. Document material-move support and tests. No command implementation or folder migration.
+
+## 14. Full real-data/control sweep
+Audit inventory (all initially pending; resolved by corresponding phases and final verification):
+| Owner/finding | Fix/phase |
+|---|---|
+| LocalDevStore.createClient fake file storage | real bytes, 2 |
+| StorageService.writeLocalFallback swallowed errors | propagate, 2 |
+| Materials.submitUpload fake metadata/1,024,000 bytes | require PDF, remove unsupported choices, 14 |
+| AcademicProvider.importSyllabus invented file/units/topics/mastery | real upload/manual entry, 14 |
+| Login.handleProcessSyllabus staged delays/false AI extraction | actual status, 14 |
+| quiz/assistant fallback mislabel | 3–4 |
+| positional quiz citations/client keys/failed writes | 4 |
+| refreshAll suppressed failures/engine query failures | 5 |
+| XP 15% minimum | 6 |
+| past exams/negative counts | 7 |
+| fake planner slots/missing-data suppression | 11 |
+| zero availability replaced | 10 |
+| narrative-only simulator | 9 |
+| settings inert/static online | 10 |
+| demo identity/course/focus fallbacks | neutral missing data, 14 |
+| assistant discarded sources/null material scope | 3 |
+| Indexed materials includes unprocessed files | actual status, 14 |
+| CountUpAll mutates all numeric text | remove, 5 |
+| unused Ui.Mission/statMeta fixed DBMS/time/streak/totals/button | remove, 14 |
+| RAG fixed inconsistent progress percentages | named stages/measured counts, 14 |
+| Analytics threshold/sample unexplained | explanation and unavailable states, 14 |
+| frontend/lib/mocks/academic.ts empty exports | retain only if used; no fake activity |
+| demo login/seed | preserve explicitly labeled |
+Finish route-by-route buttons/links/filters/forms/previews, wire or remove inert affordances. Constants for design/formulas/defaults and test fixtures are not fabricated student data.
+
+## Interfaces and validation
+Update backend/frontend types, wrappers, local-store parity, additive migrations and CONTRACTS with readiness basis, PDF retrieval, quiz run/difficulty/submission, sessions/XP, simulation/schedule, settings. Tests: formula boundaries/empty/latest10/seven-day/rounding; file bytes/reload/ownership/missing/corrupt/cleanup; Markdown/citations/unsafe HTML; AI success/failure/open circuit/missing material/count/duplicates/difficulty/source tampering/durable submission; XP duplicate/overlap/cap; dates/history/timezones; edit/filter/persist/zero/estimates/capacity; simulation nonmutation/calendar dates. Backend typecheck/relevant tests each phase, frontend production build and final core-loop walkthrough. Deterministic provider mocks separately from live Gemini verification; unavailable live provider must be reported, never substitute fallback as proof.
+
+## Execution log
+Plan saved before implementation. Live Supabase/Gemini verification remains pending.

@@ -173,6 +173,7 @@ export class PlannerContextService {
         subject_color: sub.color,
         readiness_percentage: readiness.readiness_percentage,
         readiness_breakdown: readiness.breakdown,
+        readiness_basis: readiness.basis,
         exams,
         weak_and_unfinished_topics: weakAndUnfinishedTopics,
         pending_tasks: pendingTasks,

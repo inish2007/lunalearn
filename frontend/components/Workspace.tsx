@@ -1,4 +1,5 @@
 'use client';
+import { ReadinessDetails } from './ReadinessDetails';
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
@@ -1516,6 +1517,7 @@ function Exams() {
                     </p>
                   </div>
 
+                  <ReadinessDetails readiness={r} />
                   {/* Readiness Drivers (Exact breakdown) */}
                   <div className="rounded-2xl bg-canvas p-4">
                     <p className="text-xs font-bold uppercase tracking-wider text-muted">Readiness drivers</p>

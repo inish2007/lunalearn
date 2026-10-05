@@ -126,3 +126,8 @@ cd frontend
 npm install
 npm run dev      # Boots Next.js on http://localhost:3000
 ```
+
+## Real-data improvement execution (2026-10-06)
+The earlier health/audit statements above describe historical verification, not proof of the current environment. Approved PLAN.md now governs phased delivery; layered-build-plan.md preserves the original guide.
+### Phase 1
+Readiness exposes actual input counts, latest-10 quiz sample and rolling seven-day session basis. Exams and Dashboard show explanations. Shared readiness/planner types and CONTRACTS updated. Backend typecheck and frontend typecheck checked for this phase. Live provider/storage verification remains pending.

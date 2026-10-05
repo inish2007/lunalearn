@@ -121,7 +121,17 @@ export interface ReadinessBreakdown {
   assignment_completion: number; // 10% weight
 }
 
+export interface ReadinessBasis {
+  topics: { completed: number; total: number };
+  quizzes: { count: number; limit: number };
+  revision: { minutes: number; benchmark_minutes: number; window_start: string; window_end: string };
+  assignments: { completed: number; total: number };
+  weights: ReadinessBreakdown;
+  calculated_at: string;
+}
+
 export interface SubjectReadiness {
+  basis?: ReadinessBasis;
   subject_id: string;
   readiness_percentage: number;
   breakdown: ReadinessBreakdown;
@@ -173,6 +183,7 @@ export interface QuizPerformanceSummary {
 }
 
 export interface SubjectPlannerContext {
+  readiness_basis?: ReadinessBasis;
   subject_id: string;
   subject_name: string;
   subject_code: string;

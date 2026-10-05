@@ -1,83 +1,45 @@
-# context.md — LunaLearn Integration Pass (Frontend Track)
+# LunaLearn Project Context
 
-Updated during the frontend end-to-end review. The frontend was just rewired from static
-in-memory mocks to the live backend (`frontend/lib/api.ts` + `frontend/lib/context/
-AcademicContext.tsx` are new/untracked). This document records what was inspected, what
-works, what was broken, and what was handed off.
+Updated 2026-10-05 after the production-hardening audit fixes. This file summarizes the current architecture, verified behavior, recent commits, and remaining setup requirements.
 
-## TL;DR
+## Product and architecture
 
-- **Frontend compiles & boots.** `next build` → "Compiled successfully", 18/18 pages, no type
-  or lint errors. `next dev` serves `/login` and `/dashboard` (HTTP 200).
-- **Live end-to-end testing is currently blocked by the BACKEND, not the frontend.**
-  `backend/.env` has placeholder Supabase credentials, so every API call returns
-  `fetch failed`. See `BUGS.md` #1. Nothing can fully work against a live backend until P2
-  configures a real/local Supabase.
-- **Three real frontend bugs were found and fixed** (below).
+LunaLearn connects a student's real subjects, topics, materials, tasks, exams, quizzes, and study activity to readiness/risk calculations and study recommendations. The product rule is real-data-first: start empty, show honest loading/error/empty states, and never present fabricated data or AI output as real.
 
-## What I traced (per feature), status after fixes
+- Frontend: Next.js 14 App Router, React 18, TypeScript, Tailwind (`frontend/`).
+- Backend: Node/TypeScript routes, services, middleware, and domain types (`backend/src/`).
+- Data and auth: Supabase Postgres/Auth/Storage with RLS and pgvector.
+- AI: Gemini is the required provider for embeddings, assistant answers, and generated quizzes/plans. Offline/deterministic responses must remain explicitly identified as fallbacks.
+- `CONTRACTS.md` is authoritative for shared API shapes and is updated when a contract changes.
 
-| Action | Wire-up | Status |
-|---|---|---|
-| Sign up / Log in | `POST /api/auth/signup`, `/login`, `/auth/me` in `AcademicContext` | ✅ wired (blocked by BUGS.md #1). Fixed redirect bug (see below). |
-| Add subject | `POST /subjects` (Dashboard, Learning, login onboarding) | ✅ wired + refetches |
-| Add unit | `POST /units` (+ `loadUnitsAndTopics`) | ✅ wired + refetches |
-| Add topic | `POST /topics` | ✅ wired + refetches |
-| Add exam | `POST /exams` | ✅ wired + refetches |
-| Add task | `POST /tasks` | ✅ wired + refetches |
-| Toggle/delete task, delete exam, delete subject/unit/topic/material | `PATCH/DELETE` then `refreshAll()` | ✅ wired + refetches |
-| View planner | `GET /planner/context` | ✅ wired (shows risks/recent activity via `refreshAll`) |
-| Upload material | `POST /materials` (metadata only) | ⚠️ wired as CRUD, but no real file → see BUGS.md #3 |
-| Ask AI assistant | `POST /assistant/chat` | 🐛 was a local mock — **fixed** (was never calling backend) |
-| Generate quiz | `POST /quiz/generate` | 🐛 was a local mock — **fixed** (was never calling backend) |
-| Submit quiz answers | `POST /quiz/submit` (then `refreshAll`) | 🐛 was a local mock — **fixed** |
+## Current status
 
-## Frontend bugs FIXED
+- Backend Phases 1–6 and the core academic loop are implemented. The deterministic engine computes readiness and reasoned risks from current records; planner context aggregates availability, exams, weak/unfinished topics, tasks, quizzes, readiness, and risks.
+- The frontend is integrated with the backend. The latest `frontend` production build passed with TypeScript checks and all 18 routes generated.
+- Backend `npm run typecheck` and `npm test` passed during the recent hardening work. RAG ingestion, assistant, quiz, and reactive-loop regression suites include the latest security fixes.
+- API-driven data remains authoritative. The frontend distinguishes AsyncState loading/retrying/error from a true empty state and offers retry actions for failed requests.
 
-### 1. AI Assistant never called the backend (was a hardcoded reply)
-- **Where:** `frontend/components/Workspace.tsx` → `Assistant()` → `send()`.
-- **Root cause:** the handler appended a canned string and returned; there was **no
-  `api.assistant` client and no fetch** to `POST /api/assistant/chat`.
-- **Fix:** added `api.assistant.chat()` in `frontend/lib/api.ts`; rewired `send()` to post
-  `{ message, subject_id, material_id, conversation_history }`, render the real `answer`,
-  show a `⚠️ <error>` bubble and disable the button while in flight.
+## Recent security fixes
 
-### 2. Quizzes never called the backend (was a single hardcoded question + `alert`)
-- **Where:** `Workspace.tsx` → `Quizzes()`.
-- **Root cause:** "Begin quiz" just flipped a local boolean and the only question was a
-  hardcoded string; nothing hit `/api/quiz/generate` or `/api/quiz/submit`.
-- **Fix:** added `api.quiz.generate()` and `api.quiz.submit()` in `api.ts`; rewired the
-  component to fetch a real quiz, collect answers per question, submit, show score + weak
-  topics + per-question evaluations, and call `refreshAll()` afterward so dashboard
-  readiness updates without a manual reload.
+1. **Embeddings and RAG ingestion:** Gemini embedding failures no longer substitute deterministic vectors. Provider calls retry with backoff; exhausted 429s return a typed rate-limit error. A failed chunk batch marks its job `FAILED` with the Postgres message and throws an internal error.
+2. **Prompt injection:** retrieved document preview text is HTML-escaped before entering the untrusted context block, preventing document text from closing or nesting its delimiters.
+3. **Planner capacity:** profiles can store `available_hours_per_day` (2 hours is used only when unset); topics can store `estimated_study_hours`. Strict planner context preflight requires estimates for weak/unfinished topics when an exam is within 7 days and returns `CONSTRAINT_CONFLICT` (HTTP 422) if required hours exceed available capacity. It does not generate slots for an impossible schedule.
+4. **Frontend async state:** Dashboard and Workspace render loading skeletons and retryable error banners instead of treating in-flight/failed data as a real empty account.
+5. **AI transparency and request bounds:** Gemini-backed frontend requests have a 30-second client timeout with retry recovery. Quiz and assistant responses visibly disclose when the backend marked them as AI fallback output.
+6. **Optimistic concurrency and schedule UI:** topic updates pass the cached `updated_at` as `If-Match`; 409 conflicts offer reload-latest or explicit reapply. The planner hides arbitrary subject slots when strict preflight returns `CONSTRAINT_CONFLICT` and explains how to revise the schedule.
 
-### 3. Login sent returning users into the empty onboarding wizard
-- **Where:** `frontend/app/login/page.tsx` → `handleAuth()`.
-- **Root cause:** it decided onboarding vs. dashboard from the `subjects.length === 0`
-  check, but that `subjects` value is the **stale closure** captured before `await login()`
-  finished, so it was *always* empty after auth (a state-update-doesn't-re-render bug).
-- **Fix:** always `router.push('/dashboard')` after auth; the Dashboard already renders a
-  dedicated "add your first subject" empty state for brand-new users, so onboarding still
-  happens naturally on the workspace.
+## Important contracts and migrations
 
-### Supporting changes
-- Added missing types to `frontend/lib/types/academic.ts`
-  (`AssistantChatResponseData`, `AssistantSourceChunk`, `GenerateQuizResponseData`,
-  `SubmitQuizResponseData`, `QuizQuestion`, etc.) aligned to the backend contract.
-- Cleaned up now-unused vars in `login/page.tsx` so the project still typechecks.
+- `PATCH /api/auth/me` updates the current student's `available_hours_per_day`; `null` clears it and restores the 2-hour fallback.
+- Topic create/update accepts nullable `estimated_study_hours`; planner context exposes it for unfinished/weak topics.
+- `GET /api/planner/context?strict=true` performs planner feasibility checks. `CONSTRAINT_CONFLICT` is a non-retryable 422 with actionable guidance. Missing workload estimates return `INSUFFICIENT_DATA` instead of inventing time.
+- Apply `backend/supabase/migrations/20261005000001_planner_capacity_constraints.sql` to the target Supabase database before relying on these new fields. Its application to a live database has not been verified here.
+- The topic update API uses the existing `If-Match` / `updated_at` concurrency contract.
 
-## Verified NOT bugs (do not "fix")
-- `window.matchMedia(...)` is the real `Window.matchMedia()` API — correct.
-- Frontend CRUD bodies match the backend Zod schemas (`backend/src/types/domain.ts`).
+## Validation and environment notes
 
-## Handed off
-- All backend/AI-RAG-caused breakage is in **`BUGS.md`** (Supabase placeholder creds =
-  blocker; Gemini key format; upload-material real-pipeline wiring).
-
-## To run the demo once Supabase is configured (see BUGS.md #1)
-```
-# backend
-cd backend && npm install && npm run seed && npm run dev   # :4000
-# frontend
-cd frontend && npm run build # or npm run dev               # :3000
-```
+- Frontend: `cd frontend; npm run build`.
+- Backend: `cd backend; npm run typecheck` and `npm test`.
+- Frontend build and backend checks above passed during the latest audit work. Backend tests are local/mock-oriented and emit warnings when Supabase credentials are not configured; this is not evidence of a live Supabase integration test.
+- No `backend/.env` or `frontend/.env` file was present in the workspace during this update. Do not assume live credentials or a production database connection.
+- The repository is connected to `https://github.com/inish2007/lunalearn.git`; push status is tracked in `.status.md`.

@@ -15,7 +15,7 @@ import {
   Target
 } from 'lucide-react';
 import { useAcademic } from '@/lib/context/AcademicContext';
-import { Card, PageHeader, Progress, Risk, TaskRow } from './Ui';
+import { AcademicDataErrorBanner, AcademicDataSkeleton, Card, PageHeader, Progress, Risk, TaskRow } from './Ui';
 
 export function Dashboard() {
   const {
@@ -26,7 +26,9 @@ export function Dashboard() {
     readinessMap,
     risks,
     plannerContext,
-    createSubject
+    createSubject,
+    asyncState,
+    refreshAll
   } = useAcademic();
 
   const [showAddSubjectModal, setShowAddSubjectModal] = useState(false);
@@ -36,6 +38,20 @@ export function Dashboard() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const studentFirstName = profile?.full_name ? profile.full_name.split(' ')[0] : 'there';
+
+  if (asyncState.status === 'idle' || asyncState.status === 'loading' || asyncState.status === 'retrying') {
+    return <AcademicDataSkeleton label="Loading your dashboard" />;
+  }
+
+  if (asyncState.status === 'error') {
+    return (
+      <AcademicDataErrorBanner
+        message={asyncState.error?.userMessage || asyncState.error?.message || 'Your academic records could not be synchronized.'}
+        actionSuggestion={asyncState.error?.actionSuggestion}
+        onRetry={() => { void refreshAll(); }}
+      />
+    );
+  }
 
   const handleAddSubject = async (e: React.FormEvent) => {
     e.preventDefault();

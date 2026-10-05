@@ -145,6 +145,7 @@ export class LocalDevStore {
           xp: 0,
           level: 1,
           preferred_focus_time: 'Evenings',
+          available_hours_per_day: null,
           created_at: existing.created_at,
           updated_at: new Date().toISOString()
         };
@@ -207,6 +208,7 @@ export class LocalDevStore {
       xp: 0,
       level: 1,
       preferred_focus_time: 'Evenings',
+      available_hours_per_day: null,
       created_at: now,
       updated_at: now
     };
@@ -267,6 +269,7 @@ export class LocalDevStore {
         xp: 0,
         level: 1,
         preferred_focus_time: 'Evenings',
+        available_hours_per_day: null,
         created_at: now,
         updated_at: now
       };

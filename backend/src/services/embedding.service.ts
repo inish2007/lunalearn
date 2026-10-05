@@ -57,49 +57,47 @@ export class EmbeddingService {
 
     const apiKey = this.getApiKey();
     if (!apiKey) {
-      return this.generateDeterministicVector(cleanText, this.DEFAULT_DIMENSION);
+      throw AppError.aiError('Gemini API key is not configured.', false);
     }
 
     const model = this.getModelName();
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:embedContent?key=${apiKey}`;
 
     try {
-      return await retryWithBackoff(
-        async () => {
-          const response = await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              content: { parts: [{ text: cleanText }] },
-              outputDimensionality: this.DEFAULT_DIMENSION
-            }),
-            signal: AbortSignal.timeout(10000)
-          });
+      const data = await retryWithBackoff(async () => {
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            content: { parts: [{ text: cleanText }] },
+            outputDimensionality: this.DEFAULT_DIMENSION
+          }),
+          signal: AbortSignal.timeout(10000)
+        });
 
-          if (!response.ok) {
-            const errorText = await response.text();
-            const err = new Error(`Gemini embedContent API HTTP ${response.status}: ${errorText}`);
-            (err as any).status = response.status;
-            throw err;
-          }
+        if (!response.ok) {
+          const error = new Error(`Gemini embedContent API returned HTTP ${response.status}: ${await response.text()}`) as Error & { status: number };
+          error.status = response.status;
+          throw error;
+        }
 
-          const data = (await response.json()) as GeminiEmbedResponse;
-          const values = data.embedding?.values;
+        return await response.json() as GeminiEmbedResponse;
+      }, { operationName: 'Gemini embedContent' });
 
-          if (!values || !Array.isArray(values) || values.length === 0) {
-            throw new Error('Gemini API returned empty embedding vector');
-          }
-
-          return values;
-        },
-        { maxRetries: 3, initialDelayMs: 1000, operationName: 'GeminiEmbedContent' }
-      );
-    } catch (err: unknown) {
-      const status = (err as any)?.status;
-      if (status === 429 || String(err).includes('429')) {
-        throw AppError.rateLimited('Gemini embedding API rate limit reached after retries. Please wait before retrying.');
+      const values = data.embedding?.values;
+      if (!values || !Array.isArray(values) || values.length === 0) {
+        throw AppError.aiError('Gemini embedContent API returned no embedding values.');
       }
-      throw err instanceof AppError ? err : AppError.aiError(`Gemini embedding failed: ${err instanceof Error ? err.message : String(err)}`);
+
+      return values;
+    } catch (err: unknown) {
+      const status = (err as { status?: number })?.status;
+      if (status === 429) {
+        throw AppError.rateLimited('Gemini embedding API rate limit exceeded.');
+      }
+      if (err instanceof AppError) throw err;
+      const message = err instanceof Error ? err.message : String(err);
+      throw AppError.aiError(`Gemini embedContent request failed: ${message}`);
     }
   }
 
@@ -112,7 +110,7 @@ export class EmbeddingService {
 
     const apiKey = this.getApiKey();
     if (!apiKey) {
-      return texts.map(t => this.generateDeterministicVector(t, this.DEFAULT_DIMENSION));
+      throw AppError.aiError('Gemini API key is not configured.', false);
     }
 
     const model = this.getModelName();
@@ -131,44 +129,37 @@ export class EmbeddingService {
       }));
 
       try {
-        const batchVectors = await retryWithBackoff(
-          async () => {
-            const response = await fetch(batchUrl, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ requests }),
-              signal: AbortSignal.timeout(15000)
-            });
+        const data = await retryWithBackoff(async () => {
+          const response = await fetch(batchUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ requests }),
+            signal: AbortSignal.timeout(15000)
+          });
 
-            if (!response.ok) {
-              const errorText = await response.text();
-              const err = new Error(`Gemini batchEmbedContents HTTP ${response.status}: ${errorText}`);
-              (err as any).status = response.status;
-              throw err;
-            }
+          if (!response.ok) {
+            const error = new Error(`Gemini batchEmbedContents API returned HTTP ${response.status}: ${await response.text()}`) as Error & { status: number };
+            error.status = response.status;
+            throw error;
+          }
 
-            const data = (await response.json()) as GeminiBatchEmbedResponse;
-            if (!data.embeddings || !Array.isArray(data.embeddings) || data.embeddings.length === 0) {
-              throw new Error('Gemini batchEmbedContents returned empty embeddings array');
-            }
+          return await response.json() as GeminiBatchEmbedResponse;
+        }, { operationName: 'Gemini batchEmbedContents' });
 
-            return data.embeddings.map(item => {
-              if (!item.values || item.values.length === 0) {
-                throw new Error('Received empty embedding values in batch response');
-              }
-              return item.values;
-            });
-          },
-          { maxRetries: 3, initialDelayMs: 1000, operationName: 'GeminiBatchEmbedContents' }
-        );
-
-        results.push(...batchVectors);
-      } catch (err: unknown) {
-        const status = (err as any)?.status;
-        if (status === 429 || String(err).includes('429')) {
-          throw AppError.rateLimited('Gemini batch embedding rate limit reached after retries.');
+        if (!data.embeddings || !Array.isArray(data.embeddings) || data.embeddings.length !== textBatch.length ||
+          data.embeddings.some(item => !Array.isArray(item.values) || item.values.length === 0)) {
+          throw AppError.aiError('Gemini batchEmbedContents API returned incomplete embedding values.');
         }
-        throw err instanceof AppError ? err : AppError.aiError(`Gemini batch embedding failed: ${err instanceof Error ? err.message : String(err)}`);
+
+        results.push(...data.embeddings.map(item => item.values));
+      } catch (err: unknown) {
+        const status = (err as { status?: number })?.status;
+        if (status === 429) {
+          throw AppError.rateLimited('Gemini embedding API rate limit exceeded.');
+        }
+        if (err instanceof AppError) throw err;
+        const message = err instanceof Error ? err.message : String(err);
+        throw AppError.aiError(`Gemini batchEmbedContents request failed: ${message}`);
       }
     }
 

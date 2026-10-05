@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import {
   ArrowRight,
@@ -23,6 +23,7 @@ import {
   ListChecks,
   Play,
   Plus,
+  RefreshCw,
   Search,
   Send,
   SlidersHorizontal,
@@ -32,9 +33,9 @@ import {
   UserRound,
   Wand2
 } from 'lucide-react';
-import { useAcademic } from '@/lib/context/AcademicContext';
-import { api } from '@/lib/api';
-import { Card, PageHeader, Progress, Risk, TaskRow } from './Ui';
+import { TopicUpdateConflictError, useAcademic } from '@/lib/context/AcademicContext';
+import { api, ClientAppError } from '@/lib/api';
+import { AcademicDataErrorBanner, AcademicDataSkeleton, Card, PageHeader, Progress, Risk, TaskRow } from './Ui';
 import type { Subject, Task, Exam, Material, GenerateQuizResponseData, SubmitQuizResponseData, AssistantChatMessage } from '@/lib/types/academic';
 
 type View =
@@ -55,6 +56,7 @@ const primaryButtonClass =
   'inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-bold text-white shadow-lg shadow-primary/20 transition hover:bg-deep disabled:opacity-50';
 
 export function Workspace({ view }: { view: View }) {
+  const { asyncState, refreshAll } = useAcademic();
   const content: Record<View, React.ReactNode> = {
     learning: <Learning />,
     materials: <Materials />,
@@ -69,6 +71,22 @@ export function Workspace({ view }: { view: View }) {
     notifications: <Notifications />,
     settings: <Settings />
   };
+
+  if (asyncState.status === 'idle' || asyncState.status === 'loading' || asyncState.status === 'retrying') {
+    return <div className="page-fade"><AcademicDataSkeleton label="Loading workspace" /></div>;
+  }
+
+  if (asyncState.status === 'error') {
+    return (
+      <div className="page-fade">
+        <AcademicDataErrorBanner
+          message={asyncState.error?.userMessage || asyncState.error?.message || 'Your academic records could not be synchronized.'}
+          actionSuggestion={asyncState.error?.actionSuggestion}
+          onRetry={() => { void refreshAll(); }}
+        />
+      </div>
+    );
+  }
 
   return <div className="page-fade">{content[view]}</div>;
 }
@@ -88,7 +106,8 @@ function Learning() {
     deleteUnit,
     createTopic,
     updateTopic,
-    deleteTopic
+    deleteTopic,
+    loadUnitsAndTopics
   } = useAcademic();
 
   const [showSubjectModal, setShowSubjectModal] = useState(false);
@@ -109,6 +128,40 @@ function Learning() {
   const [showTopicModal, setShowTopicModal] = useState(false);
   const [targetUnitId, setTargetUnitId] = useState<string | null>(null);
   const [topicTitle, setTopicTitle] = useState('');
+  const [topicConflict, setTopicConflict] = useState<TopicUpdateConflictError | null>(null);
+  const [resolvingTopicConflict, setResolvingTopicConflict] = useState(false);
+
+  const handleTopicUpdate = async (id: string, patch: Parameters<typeof updateTopic>[1], subjectId: string) => {
+    try {
+      await updateTopic(id, patch, subjectId);
+    } catch (err) {
+      if (err instanceof TopicUpdateConflictError) setTopicConflict(err);
+      else console.error('Failed to update topic:', err);
+    }
+  };
+
+  const resolveTopicConflict = async (choice: 'reload' | 'keep') => {
+    if (!topicConflict) return;
+    setResolvingTopicConflict(true);
+    try {
+      if (choice === 'reload') {
+        if (topicConflict.subjectId) await loadUnitsAndTopics(topicConflict.subjectId);
+      } else if (topicConflict.latestTopic?.updated_at) {
+        await updateTopic(
+          topicConflict.topicId,
+          topicConflict.patch,
+          topicConflict.subjectId,
+          topicConflict.latestTopic.updated_at
+        );
+      }
+      setTopicConflict(null);
+    } catch (err) {
+      if (err instanceof TopicUpdateConflictError) setTopicConflict(err);
+      else console.error('Failed to resolve topic update conflict:', err);
+    } finally {
+      setResolvingTopicConflict(false);
+    }
+  };
 
   const handleAddSubject = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -341,7 +394,7 @@ function Learning() {
                                     type="checkbox"
                                     checked={t.status === 'completed'}
                                     onChange={e => {
-                                      updateTopic(
+                                      void handleTopicUpdate(
                                         t.id,
                                         {
                                           status: e.target.checked ? 'completed' : 'in_progress',
@@ -364,7 +417,7 @@ function Learning() {
 
                                 <div className="flex items-center gap-2">
                                   <button
-                                    onClick={() => updateTopic(t.id, { is_weak: !t.is_weak }, activeSubject.id)}
+                                    onClick={() => { void handleTopicUpdate(t.id, { is_weak: !t.is_weak }, activeSubject.id); }}
                                     className="text-[10px] font-bold text-muted hover:text-primary"
                                   >
                                     {t.is_weak ? 'Unmark weak' : 'Mark weak'}
@@ -501,6 +554,41 @@ function Learning() {
           </div>
         </div>
       )}
+
+      {topicConflict && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4 backdrop-blur-sm">
+          <div role="dialog" aria-modal="true" aria-labelledby="topic-conflict-title" className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
+            <h2 id="topic-conflict-title" className="text-lg font-bold">This topic changed elsewhere</h2>
+            <p className="mt-2 text-sm leading-6 text-muted">
+              Another edit was saved before yours. Reload the latest topic or explicitly keep your changes on top of that version.
+            </p>
+            {topicConflict.latestTopic && (
+              <p className="mt-3 rounded-lg bg-canvas p-3 text-xs text-muted">
+                Latest saved status: <strong>{topicConflict.latestTopic.status}</strong>
+                {topicConflict.latestTopic.is_weak ? ' · Marked weak' : ''}
+              </p>
+            )}
+            <div className="mt-5 flex flex-wrap justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => { void resolveTopicConflict('reload'); }}
+                disabled={resolvingTopicConflict}
+                className="rounded-lg border border-highlight px-3 py-2 text-sm font-bold text-muted disabled:opacity-50"
+              >
+                Reload latest
+              </button>
+              <button
+                type="button"
+                onClick={() => { void resolveTopicConflict('keep'); }}
+                disabled={resolvingTopicConflict || !topicConflict.latestTopic?.updated_at}
+                className="rounded-lg bg-primary px-3 py-2 text-sm font-bold text-white disabled:opacity-50"
+              >
+                Keep my changes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
@@ -518,6 +606,8 @@ function Materials() {
   const [matType, setMatType] = useState('PDF');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [uploadTimedOut, setUploadTimedOut] = useState(false);
 
   const filtered = materials.filter(m => {
     const matchesQuery = m.name.toLowerCase().includes(query.toLowerCase());
@@ -525,10 +615,11 @@ function Materials() {
     return matchesQuery && matchesSubject;
   });
 
-  const handleUpload = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const submitUpload = async () => {
     if (!matSubjectId) return;
     setIsUploading(true);
+    setUploadError(null);
+    setUploadTimedOut(false);
     try {
       if (selectedFile) {
         await uploadMaterialPdf(selectedFile, matSubjectId);
@@ -545,10 +636,17 @@ function Materials() {
       setSelectedFile(null);
       setShowUploadModal(false);
     } catch (err) {
-      console.error('Material upload error:', err);
+      const timedOut = err instanceof ClientAppError && err.code === 'REQUEST_TIMEOUT';
+      setUploadTimedOut(timedOut);
+      setUploadError(err instanceof ClientAppError ? err.userMessage : err instanceof Error ? err.message : 'Material upload failed.');
     } finally {
       setIsUploading(false);
     }
+  };
+
+  const handleUpload = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await submitUpload();
   };
 
   return (
@@ -721,6 +819,21 @@ function Materials() {
                   ))}
                 </select>
               </div>
+              {uploadError && (
+                <div role="alert" className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800">
+                  <p>{uploadError}</p>
+                  {uploadTimedOut && (
+                    <button
+                      type="button"
+                      onClick={() => { void submitUpload(); }}
+                      disabled={isUploading}
+                      className="mt-2 inline-flex items-center gap-2 rounded-lg border border-red-300 bg-white px-3 py-2 font-bold disabled:opacity-50"
+                    >
+                      <RefreshCw size={14} /> Retry upload
+                    </button>
+                  )}
+                </div>
+              )}
               <div className="flex justify-end gap-3 pt-3">
                 <button
                   type="button"
@@ -756,26 +869,31 @@ function Assistant() {
   const [selectedSubId, setSelectedSubId] = useState<string>(subjects[0]?.id || '');
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
-  const [messages, setMessages] = useState<{ role: 'ai' | 'user'; text: string }[]>([
+  const [messages, setMessages] = useState<{ role: 'ai' | 'user'; text: string; isFallback?: boolean; notice?: string }[]>([
     {
       role: 'ai',
       text: 'Hello! I am your LunaLearn study assistant. Ask me questions about your course materials, explanations of difficult topics, or what to revise today.'
     }
   ]);
+  const [timeoutRetry, setTimeoutRetry] = useState<{ prompt: string; message: string } | null>(null);
 
   const activeSub = subjects.find(s => s.id === selectedSubId) || subjects[0];
   const activeMaterials = materials.filter(m => !selectedSubId || m.subject_id === selectedSubId);
 
-  const send = async () => {
-    if (!text.trim() || sending) return;
-    const userPrompt = text.trim();
+  const send = async (retryPrompt?: string) => {
+    const isRetry = typeof retryPrompt === 'string';
+    const userPrompt = isRetry ? retryPrompt : text.trim();
+    if (!userPrompt || sending) return;
     setText('');
     setSending(true);
-    setMessages(prev => [...prev, { role: 'user', text: userPrompt }]);
+    setTimeoutRetry(null);
+    if (!isRetry) setMessages(prev => [...prev, { role: 'user', text: userPrompt }]);
 
     try {
-      const history: AssistantChatMessage[] = messages
+      const priorMessages = messages
         .filter(m => m.role === 'user' || m.role === 'ai')
+        .slice(isRetry ? 0 : undefined, isRetry ? -1 : undefined);
+      const history: AssistantChatMessage[] = priorMessages
         .map(m => ({ role: m.role === 'ai' ? ('assistant' as const) : ('user' as const), content: m.text }))
         .slice(-10);
 
@@ -786,13 +904,19 @@ function Assistant() {
         conversation_history: history
       });
 
-      setMessages(prev => [...prev, { role: 'ai', text: res.answer || 'No answer returned.' }]);
+      setMessages(prev => [...prev, {
+        role: 'ai',
+        text: res.answer || 'No answer returned.',
+        isFallback: res.is_fallback,
+        notice: res.notice
+      }]);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Assistant request failed. Please try again.';
-      setMessages(prev => [
-        ...prev,
-        { role: 'ai', text: `⚠️ ${msg}` }
-      ]);
+      if (err instanceof ClientAppError && err.code === 'REQUEST_TIMEOUT') {
+        setTimeoutRetry({ prompt: userPrompt, message: err.userMessage });
+      } else {
+        const msg = err instanceof ClientAppError ? err.userMessage : err instanceof Error ? err.message : 'Assistant request failed. Please try again.';
+        setMessages(prev => [...prev, { role: 'ai', text: `⚠️ ${msg}` }]);
+      }
     } finally {
       setSending(false);
     }
@@ -850,8 +974,26 @@ function Assistant() {
                   }`}
                 >
                   {m.text}
+                  {m.isFallback && (
+                    <p role="status" className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-950">
+                      {m.notice || 'The AI model was temporarily unavailable; this answer was generated without it.'}
+                    </p>
+                  )}
                 </div>
               ))}
+              {timeoutRetry && (
+                <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-900">
+                  <p>{timeoutRetry.message}</p>
+                  <button
+                    type="button"
+                    onClick={() => { void send(timeoutRetry.prompt); }}
+                    disabled={sending}
+                    className="mt-2 inline-flex items-center gap-2 rounded-lg border border-red-300 bg-white px-3 py-2 text-xs font-bold disabled:opacity-50"
+                  >
+                    <RefreshCw size={14} /> Retry question
+                  </button>
+                </div>
+              )}
             </div>
 
             <div className="border-t border-highlight/35 p-4">
@@ -863,7 +1005,7 @@ function Assistant() {
                   className="min-w-0 flex-1 bg-transparent text-sm outline-none"
                   placeholder={`Ask Luna about ${activeSub?.name || 'your studies'}...`}
                 />
-                <button onClick={send} disabled={sending} className="grid h-10 w-10 place-items-center rounded-xl bg-primary text-white disabled:opacity-50">
+                <button onClick={() => { void send(); }} disabled={sending} className="grid h-10 w-10 place-items-center rounded-xl bg-primary text-white disabled:opacity-50">
                   <Send size={17} />
                 </button>
               </div>
@@ -1148,9 +1290,33 @@ function Tasks() {
 // ============================================================================
 function Planner() {
   const { plannerContext, subjects, exams, tasks, risks } = useAcademic();
+  const [constraintConflict, setConstraintConflict] = useState<ClientAppError | null>(null);
 
   const settings = plannerContext?.student?.study_time_settings;
   const now = new Date();
+
+  useEffect(() => {
+    if (subjects.length === 0 || !plannerContext) {
+      setConstraintConflict(null);
+      return;
+    }
+
+    const controller = new AbortController();
+    let active = true;
+    setConstraintConflict(null);
+
+    api.planner.getContext(undefined, controller.signal, true).catch((err: unknown) => {
+      if (!active || (err instanceof Error && err.name === 'AbortError')) return;
+      if (err instanceof ClientAppError && err.code === 'CONSTRAINT_CONFLICT') {
+        setConstraintConflict(err);
+      }
+    });
+
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [plannerContext?.generated_at, subjects.length]);
 
   return (
     <>
@@ -1175,7 +1341,15 @@ function Planner() {
               </span>
             </div>
 
-            {subjects.length === 0 ? (
+            {constraintConflict ? (
+              <div role="alert" className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
+                <h3 className="font-bold">This schedule isn&apos;t achievable with your available time</h3>
+                <p className="mt-2 leading-6">{constraintConflict.userMessage || constraintConflict.message}</p>
+                <p className="mt-2 text-xs leading-5">
+                  Move the exam date, revise the weak or unfinished topics, or increase your available study hours per day.
+                </p>
+              </div>
+            ) : subjects.length === 0 ? (
               <div className="py-8 text-center text-xs text-muted">
                 Add courses and exams to generate a tailored timeline.
               </div>
@@ -1462,6 +1636,7 @@ function Quizzes() {
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<SubmitQuizResponseData | null>(null);
   const [quizError, setQuizError] = useState<string | null>(null);
+  const [quizTimedOut, setQuizTimedOut] = useState(false);
 
   // Extract recent quizzes from plannerContext
   const allRecentQuizzes = (plannerContext?.subjects || []).flatMap(s => s.recent_quiz_performance);
@@ -1470,6 +1645,7 @@ function Quizzes() {
     if (!selectedSubId || generating) return;
     setGenerating(true);
     setQuizError(null);
+    setQuizTimedOut(false);
     setResult(null);
     setAnswers({});
     try {
@@ -1481,7 +1657,9 @@ function Quizzes() {
       setQuiz(q);
     } catch (err: unknown) {
       setQuiz(null);
-      setQuizError(err instanceof Error ? err.message : 'Failed to generate quiz.');
+      const timedOut = err instanceof ClientAppError && err.code === 'REQUEST_TIMEOUT';
+      setQuizTimedOut(timedOut);
+      setQuizError(err instanceof ClientAppError ? err.userMessage : err instanceof Error ? err.message : 'Failed to generate quiz.');
     } finally {
       setGenerating(false);
     }
@@ -1516,7 +1694,24 @@ function Quizzes() {
     setResult(null);
     setAnswers({});
     setQuizError(null);
+    setQuizTimedOut(false);
   };
+
+  const quizErrorNotice = quizError ? (
+    <div role="alert" className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-800">
+      <p>{quizError}</p>
+      {quizTimedOut && (
+        <button
+          type="button"
+          onClick={() => { void beginQuiz(); }}
+          disabled={generating}
+          className="mt-2 inline-flex items-center gap-2 rounded-lg border border-red-300 bg-white px-3 py-2 font-bold disabled:opacity-50"
+        >
+          <RefreshCw size={14} /> Retry quiz generation
+        </button>
+      )}
+    </div>
+  ) : null;
 
   return (
     <>
@@ -1533,9 +1728,7 @@ function Quizzes() {
           <p className="mt-2 text-sm text-muted max-w-md mx-auto">
             No quizzes yet, complete some topics or upload material to generate your first quiz.
           </p>
-          {quizError && (
-            <p className="mt-3 rounded-xl border border-red-200 bg-red-50 px-4 py-2.5 text-xs font-semibold text-red-700">{quizError}</p>
-          )}
+          {quizErrorNotice}
           {subjects.length > 0 && (
             <>
               <div className="mt-4 flex items-center gap-2 text-xs text-muted">
@@ -1602,6 +1795,12 @@ function Quizzes() {
                 <p className="text-xs font-bold uppercase tracking-wider text-primary">
                   {quiz.grounded ? 'Grounded diagnostic' : 'Diagnostic'} · {quiz.subject_name}
                 </p>
+                {quiz.is_fallback && (
+                  <div role="status" className="flex gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-950">
+                    <CircleAlert size={17} className="mt-0.5 shrink-0" />
+                    <p>{quiz.notice || 'These questions were generated without the AI model due to a temporary issue.'}</p>
+                  </div>
+                )}
                 {quiz.questions.map((q, qi) => (
                   <div key={q.id} className="rounded-2xl border border-highlight/40 p-3.5">
                     <p className="flex gap-2 text-sm font-semibold">
@@ -1638,9 +1837,7 @@ function Quizzes() {
                     )}
                   </div>
                 ))}
-                {quizError && (
-                  <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700">{quizError}</p>
-                )}
+                {quizErrorNotice}
                 <button
                   onClick={submitQuiz}
                   disabled={submitting}
@@ -1659,9 +1856,7 @@ function Quizzes() {
                   <p className="mt-2 text-sm text-muted max-w-xs mx-auto">
                     Take a 5-question adaptive quiz to identify weak areas and reinforce your retention.
                   </p>
-                  {quizError && (
-                    <p className="mt-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700">{quizError}</p>
-                  )}
+                  {quizErrorNotice}
                   {subjects.length > 0 && (
                     <div className="mt-3 flex items-center gap-2 text-xs text-muted">
                       <span className="shrink-0">Subject</span>

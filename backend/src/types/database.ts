@@ -23,6 +23,7 @@ export interface Profile {
   xp: number;
   level: number;
   preferred_focus_time: string | null;
+  available_hours_per_day: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -53,6 +54,7 @@ export interface Topic {
   status: TopicStatus;
   is_weak: boolean;
   mastery_score: number;
+  estimated_study_hours: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -189,6 +191,7 @@ export interface TopicSummary {
   status: TopicStatus;
   is_weak: boolean;
   mastery_score: number;
+  estimated_study_hours: number | null;
 }
 
 export interface TaskSummary {
@@ -254,6 +257,7 @@ export interface Database {
           xp?: number;
           level?: number;
           preferred_focus_time?: string | null;
+          available_hours_per_day?: number | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -296,6 +300,7 @@ export interface Database {
           status?: TopicStatus;
           is_weak?: boolean;
           mastery_score?: number;
+          estimated_study_hours?: number | null;
           created_at?: string;
           updated_at?: string;
         };

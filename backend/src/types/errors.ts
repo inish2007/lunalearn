@@ -9,6 +9,7 @@ export enum ErrorCode {
   FORBIDDEN = 'FORBIDDEN',
   NOT_FOUND = 'NOT_FOUND',
   CONFLICT = 'CONFLICT',
+  CONSTRAINT_CONFLICT = 'CONSTRAINT_CONFLICT',
   PAYLOAD_TOO_LARGE = 'PAYLOAD_TOO_LARGE',
   UNSUPPORTED_MEDIA_TYPE = 'UNSUPPORTED_MEDIA_TYPE',
   RATE_LIMITED = 'RATE_LIMITED',
@@ -118,6 +119,7 @@ export class AppError extends Error {
       case ErrorCode.RATE_LIMITED:
         return 429;
       case ErrorCode.INSUFFICIENT_DATA:
+      case ErrorCode.CONSTRAINT_CONFLICT:
         return 422;
       case ErrorCode.SERVICE_UNAVAILABLE:
       case ErrorCode.CIRCUIT_BREAKER_OPEN:
@@ -157,6 +159,8 @@ export class AppError extends Error {
         return 'The requested resource could not be found.';
       case ErrorCode.CONFLICT:
         return 'This action conflicts with an existing resource or stale data state.';
+      case ErrorCode.CONSTRAINT_CONFLICT:
+        return 'The requested plan does not fit the available study time. Increase availability or revise topic estimates.';
       case ErrorCode.PAYLOAD_TOO_LARGE:
         return 'The uploaded file or request payload is too large.';
       case ErrorCode.UNSUPPORTED_MEDIA_TYPE:
@@ -225,6 +229,15 @@ export class AppError extends Error {
     return new AppError({
       code: ErrorCode.CONFLICT,
       statusCode: 409,
+      message,
+      retryable: false
+    });
+  }
+
+  public static constraintConflict(message: string): AppError {
+    return new AppError({
+      code: ErrorCode.CONSTRAINT_CONFLICT,
+      statusCode: 422,
       message,
       retryable: false
     });

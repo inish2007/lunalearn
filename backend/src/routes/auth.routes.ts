@@ -1,7 +1,7 @@
 import http from 'http';
 import { AuthService } from '../services/auth.service.js';
 import { requireAuth } from '../middleware/auth.middleware.js';
-import { SignInSchema, SignUpSchema } from '../types/auth.js';
+import { SignInSchema, SignUpSchema, UpdateProfileSettingsSchema } from '../types/auth.js';
 import { AppError } from '../types/errors.js';
 import { sendStandardSuccess, sendStandardError, getOrCreateRequestId } from '../lib/response.js';
 
@@ -143,6 +143,43 @@ export async function handleAuthRoutes(req: http.IncomingMessage, res: http.Serv
     });
 
     await protectedMe(req, res);
+    return true;
+  }
+
+  // PATCH /api/auth/me (Protected)
+  if (url.pathname === '/api/auth/me' && method === 'PATCH') {
+    const protectedUpdateProfile = requireAuth(async (req, res, ctx) => {
+      try {
+        const rawBody = await parseJsonBody(req);
+        const parsed = UpdateProfileSettingsSchema.safeParse(rawBody);
+        if (!parsed.success) {
+          const issues = parsed.error.issues.map(issue => ({ field: issue.path.join('.'), message: issue.message }));
+          sendStandardError(res, AppError.validation('Invalid profile settings', issues), undefined, { req });
+          return;
+        }
+
+        const { data, error } = await (ctx.db as any)
+          .from('profiles')
+          .update(parsed.data)
+          .eq('id', ctx.user.id)
+          .select('*')
+          .single();
+
+        if (error || !data) {
+          sendStandardError(res, AppError.internal('Failed to update profile settings', error));
+          return;
+        }
+
+        sendStandardSuccess(res, { profile: data }, 200, {
+          message: 'Profile settings updated successfully',
+          requestId
+        });
+      } catch (err: unknown) {
+        sendStandardError(res, err instanceof AppError ? err : AppError.internal('Profile settings update failed', err), requestId, { req });
+      }
+    });
+
+    await protectedUpdateProfile(req, res);
     return true;
   }
 

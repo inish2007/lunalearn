@@ -29,6 +29,10 @@ interface GeminiGenerateResponse {
   };
 }
 
+function escapeUntrustedDocumentText(text: string): string {
+  return text.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
 export class StudyAssistantService {
   public static readonly DEFAULT_MODEL = 'gemini-3.8-flash';
   public static readonly FALLBACK_MODEL = 'gemini-flash-latest';
@@ -211,7 +215,7 @@ export class StudyAssistantService {
     if (sources.length > 0) {
       sources.forEach((s, idx) => {
         prompt += `<untrusted_document_context source="${s.material_name}" page="${s.page_number ?? 'N/A'}" index="${idx + 1}">\n`;
-        prompt += `${s.preview}\n`;
+        prompt += `${escapeUntrustedDocumentText(s.preview)}\n`;
         prompt += `</untrusted_document_context>\n\n`;
       });
     } else {

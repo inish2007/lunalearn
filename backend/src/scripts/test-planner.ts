@@ -12,6 +12,7 @@
 
 import { PlannerContextService } from '../services/planner-context.service.js';
 import { PlannerContextResponse } from '../types/database.js';
+import { AppError, ErrorCode } from '../types/errors.js';
 
 let passed = 0;
 let failed = 0;
@@ -34,6 +35,14 @@ async function runPlannerTests() {
   const now = new Date();
   const examDate = new Date(now.getTime() + 6 * 24 * 60 * 60 * 1000).toISOString();
   const taskDueDate = new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString();
+  const mockProfile = {
+    id: 'student-1',
+    full_name: 'Aarav Patel',
+    course: 'Computer Science & Engineering',
+    semester: 4,
+    preferred_focus_time: 'Evening (5:30 PM - 8:30 PM)',
+    available_hours_per_day: 1.5 as number | null
+  };
 
   // Mock Supabase Client simulating full academic database
   const mockDb: any = {
@@ -43,13 +52,7 @@ async function runPlannerTests() {
           select: () => ({
             eq: () => ({
               maybeSingle: () => Promise.resolve({
-                data: {
-                  id: 'student-1',
-                  full_name: 'Aarav Patel',
-                  course: 'Computer Science & Engineering',
-                  semester: 4,
-                  preferred_focus_time: 'Evening (5:30 PM - 8:30 PM)'
-                }
+                data: mockProfile
               })
             })
           })
@@ -91,10 +94,10 @@ async function runPlannerTests() {
           select: () => ({
             in: () => Promise.resolve({
               data: [
-                { id: 'top-1', unit_id: 'unit-1', title: 'Functional Dependencies', status: 'completed', is_weak: false, mastery_score: 90 },
-                { id: 'top-2', unit_id: 'unit-1', title: 'Boyce-Codd Normal Form', status: 'in_progress', is_weak: true, mastery_score: 45 },
-                { id: 'top-3', unit_id: 'unit-2', title: 'ACID Properties', status: 'completed', is_weak: true, mastery_score: 55 },
-                { id: 'top-4', unit_id: 'unit-2', title: 'Concurrency Control Protocols', status: 'not_started', is_weak: false, mastery_score: 0 }
+                { id: 'top-1', unit_id: 'unit-1', title: 'Functional Dependencies', status: 'completed', is_weak: false, mastery_score: 90, estimated_study_hours: null },
+                { id: 'top-2', unit_id: 'unit-1', title: 'Boyce-Codd Normal Form', status: 'in_progress', is_weak: true, mastery_score: 45, estimated_study_hours: 2 },
+                { id: 'top-3', unit_id: 'unit-2', title: 'ACID Properties', status: 'completed', is_weak: true, mastery_score: 55, estimated_study_hours: 3 },
+                { id: 'top-4', unit_id: 'unit-2', title: 'Concurrency Control Protocols', status: 'not_started', is_weak: false, mastery_score: 0, estimated_study_hours: 4 }
               ]
             })
           })
@@ -221,8 +224,8 @@ async function runPlannerTests() {
     'Daily study target benchmark configured (120 min)'
   );
   assert(
-    context.student.study_time_settings.available_hours_per_day === 2.0,
-    'Available study hours per day calculated'
+    context.student.study_time_settings.available_hours_per_day === 1.5,
+    'Available study hours per day read from the student profile'
   );
 
   // Subject Planner Context
@@ -252,6 +255,10 @@ async function runPlannerTests() {
     topicTitles.includes('ACID Properties') &&
     topicTitles.includes('Concurrency Control Protocols'),
     'Weak or incomplete topics properly identified with unit metadata'
+  );
+  assert(
+    dbms.weak_and_unfinished_topics.every(topic => topic.estimated_study_hours !== null),
+    'Topic study-hour estimates are included in planner context'
   );
 
   // Pending Tasks & Assignments
@@ -285,6 +292,53 @@ async function runPlannerTests() {
   );
   assert(Array.isArray(context.global_risks), 'Global risk overview captured');
   assert(Boolean(context.generated_at), 'Timestamp generated');
+
+  console.log('\n2. Testing Planner Capacity Constraints...');
+  PlannerContextService.assertPlanFeasible(context);
+  assert(true, 'Plan is feasible when estimated hours fit the available exam window');
+
+  const overCapacityContext: PlannerContextResponse = {
+    ...context,
+    student: {
+      ...context.student,
+      study_time_settings: { ...context.student.study_time_settings, available_hours_per_day: 1 }
+    }
+  };
+  try {
+    PlannerContextService.assertPlanFeasible(overCapacityContext);
+    assert(false, 'Rejects a plan whose topic hours exceed exam-window capacity');
+  } catch (error) {
+    assert(
+      error instanceof AppError && error.code === ErrorCode.CONSTRAINT_CONFLICT && error.statusCode === 422 &&
+      error.message.includes('Increase your daily study availability'),
+      'Returns actionable typed 422 CONSTRAINT_CONFLICT when the plan does not fit'
+    );
+  }
+
+  const unestimatedContext: PlannerContextResponse = {
+    ...context,
+    subjects: context.subjects.map(subject => ({
+      ...subject,
+      weak_and_unfinished_topics: subject.weak_and_unfinished_topics.map((topic, index) =>
+        index === 0 ? { ...topic, estimated_study_hours: null } : topic
+      )
+    }))
+  };
+  try {
+    PlannerContextService.assertPlanFeasible(unestimatedContext);
+    assert(false, 'Rejects plan generation when imminent topic estimates are missing');
+  } catch (error) {
+    assert(
+      error instanceof AppError && error.code === ErrorCode.INSUFFICIENT_DATA && error.statusCode === 422 &&
+      error.message.includes('Add estimated study hours'),
+      'Requires real estimates instead of fabricating topic study time'
+    );
+  }
+
+  mockProfile.available_hours_per_day = null;
+  const defaultAvailabilityContext = await PlannerContextService.getPlannerContext(mockDb, 'student-1');
+  assert(defaultAvailabilityContext.student.study_time_settings.available_hours_per_day === 2.0,
+    'Defaults daily availability to 2 hours only when the profile has no value');
 
   console.log('\n====================================================');
   console.log(`Results: ${passed} passed, ${failed} failed.`);

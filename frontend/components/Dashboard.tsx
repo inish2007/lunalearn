@@ -120,8 +120,8 @@ export function Dashboard() {
 
         {/* Modal for Quick Subject Creation */}
         {showAddSubjectModal && (
-          <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4 backdrop-blur-sm">
-            <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl">
+          <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4 backdrop-blur-sm">
+            <div className="w-full max-w-md rounded-3xl bg-card border border-highlight/40 p-6 shadow-2xl text-ink">
               <h3 className="text-xl font-bold">Add Subject</h3>
               <p className="mt-1 text-xs text-muted">Register a syllabus course for this semester.</p>
 
@@ -354,7 +354,7 @@ export function Dashboard() {
           </Card>
 
           {/* Exam Readiness Card (Never fabricate percentages) */}
-          <Card className="bg-gradient-to-br from-white to-purple-50">
+          <Card className="bg-gradient-to-br from-card via-card to-highlight/30">
             {nearestExam ? (
               hasCalculableReadiness ? (
                 <>
@@ -366,8 +366,8 @@ export function Dashboard() {
                         {nearestExamDaysAway} day{nearestExamDaysAway === 1 ? '' : 's'} remaining
                       </p>
                     </div>
-                    <div className="pulse-ring grid h-24 w-24 place-items-center rounded-full border-[9px] border-highlight bg-white">
-                      <strong className="text-2xl text-deep">
+                    <div className="pulse-ring grid h-24 w-24 place-items-center rounded-full border-[9px] border-highlight bg-surface">
+                      <strong className="text-2xl text-deep dark:text-accent">
                         {primaryReadiness.readiness_percentage}%
                       </strong>
                     </div>

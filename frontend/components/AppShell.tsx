@@ -24,6 +24,7 @@ import {
   X
 } from 'lucide-react';
 import { useAcademic } from '@/lib/context/AcademicContext';
+import { ThemeToggle } from '@/components/ThemeToggle';
 
 const primary = [
   ['Dashboard', '/dashboard', LayoutDashboard],
@@ -100,8 +101,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         key={href}
         className={`pill-nav-effect flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition ${
           path === href
-            ? 'bg-primary text-white shadow-lg shadow-primary/20'
-            : 'text-muted hover:bg-highlight/40 hover:text-deep'
+            ? 'bg-primary text-white shadow-lg shadow-primary/25'
+            : 'text-muted hover:bg-highlight/30 hover:text-ink'
         }`}
       >
         <Icon size={18} />
@@ -110,52 +111,59 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     ));
 
   return (
-    <div className="min-h-screen bg-canvas">
+    <div className="relative min-h-screen bg-canvas text-ink transition-colors duration-300">
+      {/* Ambient Living Cosmic Nebula (Dreamy Cozy Atmosphere) */}
+      <div className="pointer-events-none fixed inset-0 z-0 overflow-hidden">
+        <div className="cosmic-orb -left-20 -top-20 h-[500px] w-[500px] bg-primary/10 dark:bg-primary/18" />
+        <div className="cosmic-orb -right-32 top-1/3 h-[580px] w-[580px] bg-accent/8 dark:bg-amber-400/9" />
+        <div className="cosmic-orb bottom-10 left-1/4 h-[420px] w-[420px] bg-deep/8 dark:bg-primary/12" />
+      </div>
+
       {/* Mobile Menu Trigger */}
       <button
         aria-label="Open navigation"
         onClick={() => setOpen(true)}
-        className="fixed left-4 top-4 z-40 rounded-xl bg-white p-2 text-primary shadow-soft lg:hidden"
+        className="fixed left-4 top-4 z-40 rounded-xl border border-highlight/30 bg-surface p-2 text-primary shadow-soft lg:hidden"
       >
         <Menu />
       </button>
 
       {/* Sidebar Navigation */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 flex w-72 flex-col border-r border-highlight/40 bg-white p-6 transition-transform lg:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-50 flex w-72 flex-col border-r border-highlight/30 bg-surface p-6 shadow-soft transition-transform lg:translate-x-0 ${
           open ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
         <div className="mb-8 flex items-center justify-between">
-          <Link href="/dashboard" className="flex items-center gap-2 text-2xl font-black tracking-tight text-ink">
-            <span className="grid h-9 w-9 place-items-center rounded-xl bg-primary text-white">
+          <Link href="/dashboard" className="flex items-center gap-2.5 text-2xl font-black tracking-tight text-ink">
+            <span className="grid h-9 w-9 place-items-center rounded-xl bg-primary text-white shadow-md shadow-primary/30">
               <Sparkles size={19} />
             </span>
             Luna<span className="text-primary">Learn</span>
           </Link>
-          <button className="lg:hidden" onClick={() => setOpen(false)} aria-label="Close navigation">
+          <button className="lg:hidden text-muted hover:text-ink" onClick={() => setOpen(false)} aria-label="Close navigation">
             <X />
           </button>
         </div>
 
         {/* Real Profile Summary Badge */}
-        <div className="mb-5 rounded-3xl bg-gradient-to-br from-highlight/60 to-white p-4">
+        <div className="mb-5 rounded-3xl border border-highlight/30 bg-gradient-to-br from-highlight/30 to-card p-4 dark:from-highlight/15 dark:to-card">
           <div className="flex items-center gap-3">
-            <div className="grid h-11 w-11 place-items-center rounded-2xl bg-deep text-sm font-bold text-white">
+            <div className="grid h-11 w-11 place-items-center rounded-2xl bg-deep text-sm font-bold text-white shadow-sm">
               {studentInitials}
             </div>
             <div className="min-w-0 flex-1">
-              <p className="truncate font-bold text-sm">{studentName}</p>
+              <p className="truncate font-bold text-sm text-ink">{studentName}</p>
               <p className="truncate text-xs text-muted">{studentDegree}</p>
             </div>
           </div>
-          <div className="mt-3.5 h-1.5 overflow-hidden rounded-full bg-white">
+          <div className="mt-3.5 h-1.5 overflow-hidden rounded-full bg-highlight/30">
             <div
               className="h-full rounded-full bg-primary"
               style={{ width: `${Math.min(100, Math.max(15, (studentXp % 500) / 5))}%` }}
             />
           </div>
-          <p className="mt-2 text-xs font-medium text-deep">
+          <p className="mt-2 text-xs font-semibold text-primary">
             Level {studentLevel} · {studentXp.toLocaleString()} XP
           </p>
         </div>
@@ -167,33 +175,39 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           {links(secondary)}
         </nav>
 
-        {/* Sign Out Button */}
-        <button
-          onClick={handleSignOut}
-          className="mt-6 flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-muted hover:bg-highlight/40 hover:text-red-600 transition"
-        >
-          <LogOut size={18} />
-          Sign out
-        </button>
+        {/* Sidebar Footer with Sign Out */}
+        <div className="mt-4 border-t border-highlight/30 pt-4">
+          <button
+            onClick={handleSignOut}
+            className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium text-muted hover:bg-highlight/30 hover:text-red-500 transition"
+          >
+            <LogOut size={18} />
+            Sign out
+          </button>
+        </div>
       </aside>
 
       {/* Main Content Area */}
-      <main className="min-h-screen lg:ml-72">
-        <header className="sticky top-0 z-30 flex h-20 items-center justify-end gap-3 border-b border-highlight/30 bg-canvas/85 px-5 backdrop-blur-xl sm:px-8">
+      <main className="relative z-10 min-h-screen lg:ml-72">
+        <header className="sticky top-0 z-30 flex h-20 items-center justify-end gap-3 border-b border-highlight/30 bg-canvas/80 px-5 backdrop-blur-xl sm:px-8">
           <div className="mr-auto hidden text-sm font-medium text-muted md:block">{todayStr}</div>
+
+          {/* Celestial Theme Toggle (Sun/Moon) */}
+          <ThemeToggle />
+
           <Link
             href="/notifications"
-            className="relative grid h-10 w-10 place-items-center rounded-xl bg-white text-muted shadow-sm hover:text-primary transition"
+            className="relative grid h-10 w-10 place-items-center rounded-2xl border border-highlight/30 bg-card text-muted shadow-sm hover:border-primary/50 hover:text-primary transition"
           >
             <Bell size={18} />
             {risks.length > 0 && <i className="absolute right-2 top-2 h-2 w-2 rounded-full bg-primary animate-pulse" />}
           </Link>
           <Link
             href="/profile"
-            className="flex items-center gap-2 rounded-xl bg-white px-2.5 py-1.5 text-sm font-semibold shadow-sm hover:bg-canvas transition"
+            className="flex items-center gap-2 rounded-2xl border border-highlight/30 bg-card px-3 py-2 text-sm font-semibold text-ink shadow-sm hover:border-primary/50 transition"
           >
             <span>{studentInitials}</span>
-            <ChevronRight size={15} />
+            <ChevronRight size={15} className="text-muted" />
           </Link>
         </header>
 

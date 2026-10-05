@@ -8,14 +8,15 @@
 
 - **Product Name**: LunaLearn
 - **Core Tagline**: *"Don’t just manage. Navigate. Make every study hour count."*
-- **Target Audience**: College / university students (exemplified in the current mock profile by *Aarav Verma, B.Tech · Semester 4*).
+- **Target Audience**: College / university students (exemplified in the canonical demo profile by *Aarav Patel, B.Tech · Semester 4*).
 - **Primary Problem Solved**: Academic anxiety, cognitive overload, and inefficient cramming caused by fragmented notes, unclear syllabus completion, and uncertainty about what to study next.
-- **Core Value Proposition**:
+- **Core Value Propositions**:
   1. **Daily Missions**: Directs the student to the highest-leverage task for the day (e.g., stabilizing DBMS readiness before a mid-term).
-  2. **Multi-Factor Exam Readiness**: Computes a readiness score based on topics covered, quiz results, assignment completion, and revision consistency.
-  3. **Grounded AI Study Assistant**: AI tutor grounded in uploaded PDFs, slides, and lecture notes.
-  4. **What-If Simulator**: Predicts the impact of allocating study hours across different subjects before committing.
-  5. **Unified Academic Hub**: Centralizes syllabus tracking, lecture materials, task deadlines, and revision analytics.
+  2. **Multi-Factor Exam Readiness**: Computes an algorithmic readiness score based on topics covered, quiz results, assignment completion, and revision consistency.
+  3. **Grounded AI Study Assistant**: AI tutor grounded in uploaded course PDFs, slides, and lecture notes using semantic vector retrieval.
+  4. **Diagnostic Practice Quizzes**: Automatically generates multiple-choice quizzes from course materials and identifies weak topics to update the study plan.
+  5. **What-If Simulator**: Predicts the impact of allocating study hours across different subjects before committing.
+  6. **Calm Aesthetic Experience**: Designed under the "Midnight Lunar Library" (dark) and "Daylight Lavender" (light) themes with soothing ambient motion.
 
 ---
 
@@ -23,11 +24,47 @@
 
 ```
 LunaLearn/
+├── .agents/                              # Workflows and agent customizations
 ├── .git/                                 # Git tracking repository
 ├── .gitignore                            # Root ignore file
-├── project_context.md                    # Project context & architecture documentation
+├── BUGS.md                               # Tracking and resolutions for handoffs & bugs
+├── CONTRACTS.md                          # Comprehensive API request/response contracts
+├── DESIGN.md                             # UI/UX design tokens, themes & animations spec
+├── design-context.md                     # Complete design blueprint for frontend tooling
+├── context.md                            # Full-stack integration & system status
+├── project_context.md                    # Core project context & architecture guide
+├── backend/                              # Node.js + TypeScript academic backend
+│   ├── src/
+│   │   ├── index.ts                      # Server entry point & CORS configuration (:4000)
+│   │   ├── lib/
+│   │   │   ├── local-store.ts            # LocalDevStore (in-memory + scratch/local-db.json)
+│   │   │   ├── scoped-client.ts          # Authenticated scoped client resolver
+│   │   │   └── supabase.ts               # Supabase client initializer & fallback detector
+│   │   ├── routes/
+│   │   │   ├── assistant.routes.ts       # AI Assistant chat & query endpoints
+│   │   │   ├── auth.routes.ts            # Signup, login, and me endpoints
+│   │   │   ├── domain.routes.ts          # Subjects, units, topics, tasks, exams, materials
+│   │   │   ├── engine.routes.ts          # Readiness, risks, and health endpoints
+│   │   │   ├── planner.routes.ts         # Unified planner context endpoint
+│   │   │   ├── quiz.routes.ts            # Quiz generation and submission endpoints
+│   │   │   └── rag.routes.ts             # PDF upload, chunking, and semantic search
+│   │   ├── services/                     # Business logic and external API integrations
+│   │   │   ├── assistant.service.ts      # Grounded chat with citations
+│   │   │   ├── auth.service.ts           # Authentication & token generation
+│   │   │   ├── embedding.service.ts      # Google Gemini vector embeddings
+│   │   │   ├── engine.service.ts         # Algorithmic readiness & risk scoring
+│   │   │   ├── planner-context.service.ts# Adaptive daily timeline synthesizer
+│   │   │   ├── quiz.service.ts           # Grounded quiz generation & evaluation
+│   │   │   ├── rag-material.service.ts   # Multipart PDF upload, parsing & chunking
+│   │   │   └── semantic-search.service.ts# Cosine similarity vector search
+│   │   ├── types/
+│   │   │   └── domain.ts                 # Zod validation schemas & TypeScript interfaces
+│   │   └── scripts/                      # Seeders & automated verification test suites
+│   ├── scratch/
+│   │   └── local-db.json                 # Persistent local JSON store for offline dev
+│   └── package.json                      # Backend dependencies & npm scripts
 └── frontend/                             # Next.js 14 App Router application
-    ├── app/                              # Next.js App Router routes
+    ├── app/                              # Next.js App Router routes (18 static routes)
     │   ├── analytics/page.tsx            # Analytics & study habits view
     │   ├── assistant/page.tsx            # Grounded AI study assistant
     │   ├── dashboard/page.tsx            # Main student dashboard
@@ -38,31 +75,28 @@ LunaLearn/
     │   ├── notifications/page.tsx        # System & deadline notifications
     │   ├── planner/page.tsx              # Adaptive daily timeline & availability
     │   ├── profile/page.tsx              # Long-term learning profile & strengths
-    │   ├── quizzes/page.tsx              # Diagnostic quizzes & practice checks
+    │   ├── quizzes/page.tsx              # Diagnostic practice quizzes & scoring
     │   ├── settings/page.tsx             # Student settings & preferences
     │   ├── simulator/page.tsx            # What-If study hours simulator
     │   ├── tasks/page.tsx                # Tasks, assignments & deadline conflicts
-    │   ├── globals.css                   # Custom theme styles, keyframes & utilities
-    │   ├── layout.tsx                    # Root HTML/Body layout with metadata
+    │   ├── globals.css                   # Custom theme tokens, keyframes & utilities
+    │   ├── layout.tsx                    # Root layout with ThemeProvider & AcademicProvider
     │   └── page.tsx                      # Root redirect (redirects to /dashboard)
     ├── components/                       # Shared UI & layout components
-    │   ├── AppShell.tsx                  # Global persistent navigation sidebar & header
+    │   ├── AppShell.tsx                  # Global navigation sidebar, header & theme toggle
     │   ├── Dashboard.tsx                 # Dashboard home composition & widgets
+    │   ├── ThemeToggle.tsx               # Celestial Sun/Moon theme switcher
     │   ├── Ui.tsx                        # Reusable primitives (Card, Progress, Risk, Mission)
-    │   └── Workspace.tsx                 # Route switchboard & feature view implementations
-    ├── lib/                              # Shared types, data models & mocks
-    │   ├── mocks/
-    │   │   └── academic.ts               # Sample mock subjects, tasks, exams, materials
+    │   └── Workspace.tsx                 # Feature view switchboard & client implementations
+    ├── lib/
+    │   ├── api.ts                        # Unified REST API client for backend
+    │   ├── context/
+    │   │   ├── AcademicContext.tsx       # Global academic state, active subject, refetches
+    │   │   └── ThemeContext.tsx          # Dark/light theme state & local persistence
     │   └── types/
-    │       └── academic.ts               # TypeScript domain interfaces
-    ├── node_modules/                     # Installed npm packages
-    ├── next.config.mjs                   # Next.js build configuration
-    ├── next-env.d.ts                     # Next.js TypeScript declarations
-    ├── package.json                      # Project dependencies & npm scripts
-    ├── package-lock.json                 # Locked dependency tree
-    ├── postcss.config.mjs                # PostCSS configuration for Tailwind
+    │       └── academic.ts               # Domain interfaces & API response payloads
     ├── tailwind.config.ts                # Tailwind theme customization & color tokens
-    └── tsconfig.json                     # TypeScript compiler configuration
+    └── package.json                      # Frontend dependencies & npm scripts
 ```
 
 ---
@@ -71,45 +105,47 @@ LunaLearn/
 
 | Layer | Technology | Version | Purpose |
 |---|---|---|---|
-| **Framework** | Next.js (App Router) | `14.2.5` | React server/client architecture, routing, optimized bundling |
-| **UI Library** | React / React DOM | `18.3.1` | Declarative component UI |
-| **Language** | TypeScript | `5.5.4` | Strict type safety across academic domain models |
-| **Styling** | Tailwind CSS | `3.4.7` | Utility-first styling with custom palette and animations |
-| **CSS Preprocessor**| PostCSS & Autoprefixer | `8.4.39` / `10.4.19` | Cross-browser CSS processing |
+| **Frontend Framework** | Next.js (App Router) | `14.2.5` | React server/client architecture, routing, optimized bundling |
+| **Frontend UI Library** | React / React DOM | `18.3.1` | Declarative component UI |
+| **Styling & Theming** | Tailwind CSS & Vanilla CSS | `3.4.7` | Utility styling with CSS variable design tokens and animations |
 | **Icons** | Lucide React | `^0.468.0` | Minimalist icons for academic navigation |
-| **Fonts** | System Sans-Serif | Native | Fast rendering, clean readability |
+| **Backend Framework** | Node.js / Express | `20.x` / Node | HTTP REST API server running on port 4000 |
+| **Language** | TypeScript | `5.5.4` | Strict end-to-end type safety |
+| **Data Validation** | Zod | `3.23.8` | Strict runtime schema validation for all API inputs |
+| **Database & Auth** | Supabase (PostgreSQL + RLS) | `2.45.4` | Production cloud database and authentication |
+| **Local Dev Store** | LocalDevStore (`local-store.ts`) | Custom | In-memory & JSON file-backed fallback with RLS simulation |
+| **AI / LLM Engine** | Google Gemini (`@google/genai`) | Gemini 1.5 | Grounded chat, quiz generation, and 1536-dim vector embeddings |
+| **Document Processing** | `pdf-parse` & `busboy` | `2.4.5` / `1.6.0` | Multipart streaming and binary PDF text extraction |
 
 ---
 
 ## 4. Design System & Theme Tokens
 
-LunaLearn uses a lavender/deep purple palette (`#F8F7FF` canvas with rich purple/violet accents) to induce calm focus:
+LunaLearn features two harmonious theme modes defined in `DESIGN.md`:
 
-### Color Tokens (`tailwind.config.ts` & `globals.css`)
-- **`canvas`** (`#F8F7FF`): Soft lilac-tinted off-white background.
-- **`card`** (`#FFFFFF`): Clean white surface for elevated cards.
-- **`primary`** (`#6C4CE8`): Radiant royal purple for primary buttons, active tabs, and key progress indicators.
-- **`deep`** (`#4B2DB8`): Darker indigo for high-contrast headers, avatar badges, and dark gradient cards.
-- **`accent`** (`#A78BFA`): Soft lavender for secondary highlights and badge backgrounds.
-- **`highlight`** (`#D8CCFF`): Light pastel violet for borders, track bars, and subtle fills.
-- **`ink`** (`#1F1733`): Deep obsidian purple for primary text.
-- **`muted`** (`#6F6680`): Slate violet for secondary captions, timestamps, and metadata.
+### A. Dark Mode: *Midnight Lunar Library* (Default)
+- **`--canvas`** (`#0E0C1B`): Deep velvet twilight canvas background.
+- **`--surface`** (`#151229`): Elevated container & modal background.
+- **`--card`** (`#1A1633`): Velvet card background with subtle purple tint.
+- **`--primary`** (`#8E72FF`): Glowing iris for primary actions and focus rings.
+- **`--deep`** (`#6D4BD9`): Royal amethyst for active nav indicators and headings.
+- **`--accent`** (`#C4B5FD`): Moonlight lavender for badges and links.
+- **`--ink`** (`#F1EEFA`): Starlight white for primary text.
+- **`--muted`** (`#A29BB8`): Nebula gray for metadata and captions.
 
-### Shadows & Radii
-- **`shadow-soft`**: `0 12px 32px rgba(75,45,184,.08)` — gentle elevation for cards.
-- **`shadow-float`**: `0 18px 45px rgba(75,45,184,.15)` — prominent float for hero mission cards.
-- **`rounded-4xl`**: `2rem` — playful, friendly curved surfaces.
-
-### Micro-Animations (`globals.css`)
-- **`page-fade`**: Smooth entry fade and upward translation on view transitions.
-- **`float-in`**: Cubic-bezier spring entry for cards.
-- **`pulse-ring`**: Gentle pulsating ring around readiness score circles.
-- **`wave-line`**: Animated SVG line stroke for weekly focus time activity.
-- **`gradient-orb`**: Blurred luminous backdrop orbs for auth/hero screens.
+### B. Light Mode: *Daylight Lavender*
+- **`--canvas`** (`#F8F7FF`): Crisp pale lavender-tinted white background.
+- **`--surface`** (`#FFFFFF`): Pure white shell.
+- **`--card`** (`#FFFFFF`): Crisp white cards.
+- **`--primary`** (`#6C4CE8`): Royal indigo for buttons and active states.
+- **`--deep`** (`#4B2DB8`): Deep twilight purple for brand headings.
+- **`--accent`** (`#A78BFA`): Pastel wisteria for tags and progress bars.
+- **`--ink`** (`#1F1733`): Deep obsidian purple for text.
+- **`--muted`** (`#6F6680`): Slate purple for captions.
 
 ---
 
-## 5. Domain Models & Data Types (`frontend/lib/types/academic.ts`)
+## 5. Domain Models & Core Types (`frontend/lib/types/academic.ts`)
 
 ```typescript
 export type RiskLevel = 'High' | 'Medium' | 'On track';
@@ -156,111 +192,46 @@ export interface Material {
   size: string;
   updated: string;
 }
+
+export interface AssistantSourceChunk {
+  document_name: string;
+  similarity: number;
+  chunk_text: string;
+}
+
+export interface QuizQuestion {
+  id: string;
+  question: string;
+  options: string[];
+  explanation?: string;
+}
 ```
 
 ---
 
-## 6. Application Architecture & Views
+## 6. Current Implementation Status
 
-### A. Navigation & Shell (`AppShell.tsx`)
-- **Collapsible / Drawer Sidebar**:
-  - Brand header with animated sparkles icon.
-  - Student identity card: *Aarav Verma (B.Tech · Sem 4)* with Level 8 / XP tracker.
-  - **Primary Routes**: Dashboard, My Learning, My Materials, AI Assistant, Tasks & Assignments, Study Planner, Exams & Readiness, Quizzes.
-  - **Explore Routes**: Analytics, What-If Simulator, Learning Profile, Notifications, Settings.
-  - Sign-out link redirecting to `/login`.
-- **Top Header**:
-  - Real-time formatted date banner.
-  - Quick notification bell with active unread pill.
-  - User avatar dropdown.
-
-### B. Core Screens Breakdown
-
-1. **Onboarding / Authentication (`/login`)**:
-   - 3-step dynamic onboarding carousel (`Welcome`, `A few quick details`, `Ready for clarity?`).
-   - Left promotional panel showcasing value proposition and gradient accents.
-2. **Dashboard (`/dashboard`)**:
-   - **Hero Mission**: Displays the single most important action for today (e.g. *"Stabilize DBMS readiness"*).
-   - **Weekly Study Activity**: Interactive SVG curve tracking hours studied (+18% vs prior week).
-   - **Priorities & Risk Alert**: Highlights urgent deadlines and topic bottlenecks.
-   - **Exam Readiness Widget**: Circular meter indicating readiness with days remaining.
-3. **My Learning (`/learning`)**:
-   - Course overview cards showing completion vs. readiness.
-   - Unit progress accordion (e.g. Unit 1 Fundamentals, Unit 2 ER Modelling, Unit 3 Normalization, Unit 4 Transactions).
-4. **My Materials (`/materials`)**:
-   - Filterable library of notes, lecture slides, and PDFs.
-   - Folder navigation and instant client-side search query.
-   - "Try with AI" natural language file command prompt.
-5. **AI Assistant (`/assistant`)**:
-   - Chat interface pre-loaded with course context (e.g. DBMS).
-   - Grounded responses citing specific uploaded documents (e.g., `Normalization Unit 3.pdf`).
-   - Quick prompt chips for fast topic explanations and practice questions.
-6. **Tasks & Assignments (`/tasks`)**:
-   - Filterable task list (`All`, `This week`, `Completed`).
-   - Conflict detection alert (overlapping high-priority deadlines).
-7. **Study Planner (`/planner`)**:
-   - Time-blocked study timeline optimized around student energy peaks (e.g., 5:30 PM - 7:30 PM).
-   - "Why this plan?" algorithmic reasoning explanation.
-   - 7-day workload distribution chart.
-8. **Exams & Readiness (`/exams`)**:
-   - Detailed breakdown of readiness score drivers: Topics (62%), Quizzes (55%), Revision (48%), Assignments (80%).
-   - Actionable weak topic tags.
-9. **Quizzes (`/quizzes`)**:
-   - Interactive 5-question multiple choice practice test targeting weak areas.
-   - Instant feedback and performance diagnostics.
-10. **Analytics (`/analytics`)**:
-    - High-level KPIs (Overall Progress, Quiz Average, Focus Time, Study Streak).
-    - GitHub-style revision activity calendar matrix.
-11. **What-If Simulator (`/simulator`)**:
-    - Interactive range slider for available daily study hours.
-    - Real-time recalculation of projected readiness improvements and schedule adjustments.
-12. **Learning Profile (`/profile`)**:
-    - Cognitive profile: Identified strengths (SQL, ER Model) vs. growth areas (Normalization, Deadlocks).
-13. **Notifications (`/notifications`)**:
-    - Time-stamped alerts for missions, submission reminders, and streak updates.
-14. **Settings (`/settings`)**:
-    - Profile details, study schedule preferences, and notification toggles.
+- **Frontend & Navigation:** Complete. 18 static routes prerendering successfully with responsive drawer sidebar, top navigation, and theme toggle.
+- **Backend API & Routing:** Complete. All endpoints defined in `CONTRACTS.md` implemented and tested with 97/97 domain assertions passing.
+- **Offline / Local Simulation:** Complete. `LocalDevStore` provides complete zero-configuration local execution with real data persistence in `backend/scratch/local-db.json`.
+- **AI & RAG Engine:** Complete. PDF text extraction, Gemini embeddings, vector cosine retrieval, grounded assistant with citations, and diagnostic quizzes are live and verified with 50/50 test assertions passing.
+- **Adaptive Study Planner:** Complete. Dynamic feedback loop connects quiz scores, syllabus completion, and assignment deadlines into daily study missions.
 
 ---
 
-## 7. Current State & Development Roadmap
+## 7. How to Run Locally
 
-### Current Implementation Status
-- Full frontend UI architecture complete with responsive navigation and design system.
-- All 12 primary views implemented via Next.js App Router and dynamic workspace components.
-- In-memory mock data layer (`lib/mocks/academic.ts`) providing full student scenarios.
-
-### Recommended Next Steps
-1. **Backend & Persistence**:
-   - Setup an API layer (Node.js/Next.js API routes or FastAPI/Go backend).
-   - Database schema (PostgreSQL/Supabase or Prisma) for Users, Courses, Tasks, Exams, and Materials.
-2. **AI & RAG Engine**:
-   - Connect the AI Study Assistant to an LLM (e.g., Gemini 1.5 Pro / Flash).
-   - Implement document parsing and vector embeddings (pgvector / Pinecone) for PDF and slide retrieval.
-3. **Dynamic Planner Algorithm**:
-   - Build a scheduling engine that calculates optimal time blocks based on exam proximity and weak topic weightings.
-4. **State Management**:
-   - Introduce Zustand or TanStack Query for caching and global UI state.
-
----
-
-## 8. Development & Run Commands
-
-From the `frontend` directory:
-
+### Start Backend (`http://localhost:4000`):
 ```bash
-# Install dependencies
+cd backend
 npm install
+npm run seed     # Seeds demo user (aarav.patel@example.com / password123) and DBMS course
+npm run dev      # Boots backend dev server
+```
 
-# Run local development server (runs on http://localhost:3000)
-npm run dev
-
-# Build for production
-npm run build
-
-# Start production server
-npm run start
-
-# Run linting checks
-npm run lint
+### Start Frontend (`http://localhost:3000`):
+```bash
+cd frontend
+npm install
+npm run dev      # Boots Next.js development server
 ```

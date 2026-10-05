@@ -31,9 +31,13 @@ import {
   Trash2,
   Upload,
   UserRound,
-  Wand2
+  Wand2,
+  Moon,
+  Sun,
+  Monitor
 } from 'lucide-react';
 import { TopicUpdateConflictError, useAcademic } from '@/lib/context/AcademicContext';
+import { useTheme } from '@/lib/context/ThemeContext';
 import { api, ClientAppError } from '@/lib/api';
 import { AcademicDataErrorBanner, AcademicDataSkeleton, Card, PageHeader, Progress, Risk, TaskRow } from './Ui';
 import type { Subject, Task, Exam, Material, GenerateQuizResponseData, SubmitQuizResponseData, AssistantChatMessage } from '@/lib/types/academic';
@@ -1796,9 +1800,11 @@ function Quizzes() {
                   {quiz.grounded ? 'Grounded diagnostic' : 'Diagnostic'} · {quiz.subject_name}
                 </p>
                 {quiz.is_fallback && (
-                  <div role="status" className="flex gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-950">
+                  <div role="status" className="flex gap-3 rounded-2xl border border-amber-200/60 bg-amber-50/80 p-3.5 text-xs text-amber-900 dark:border-amber-400/20 dark:bg-amber-950/30 dark:text-amber-200">
                     <CircleAlert size={17} className="mt-0.5 shrink-0" />
-                    <p>{quiz.notice || 'These questions were generated without the AI model due to a temporary issue.'}</p>
+                    <div>
+                      <span className="font-bold">Offline Resilience Mode:</span> {quiz.notice || 'Generated from syllabus structure due to external AI rate limiting.'}
+                    </div>
                   </div>
                 )}
                 {quiz.questions.map((q, qi) => (
@@ -2150,16 +2156,82 @@ function Notifications() {
 // ============================================================================
 function Settings() {
   const { profile } = useAcademic();
+  const { theme, setTheme } = useTheme();
 
   return (
     <>
       <PageHeader
         eyebrow="Personalize LunaLearn"
         title="Settings"
-        description="Manage your preferences, study schedule and notification choices."
+        description="Manage your preferences, study schedule, cozy themes and notification choices."
       />
 
       <div className="max-w-3xl space-y-4">
+        {/* Appearance & Theme Settings */}
+        <Card>
+          <div>
+            <h2 className="font-bold text-ink">Appearance & Study Atmosphere</h2>
+            <p className="mt-0.5 text-xs text-muted">
+              Choose your study ambiance. Dreamy Dark Mode is crafted for late-night focus with soft lunar violet, ambient breathing glows, and zero eye fatigue.
+            </p>
+            <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <button
+                type="button"
+                onClick={() => setTheme('dark')}
+                className={`flex items-center gap-3 rounded-2xl border p-3.5 text-left transition ${
+                  theme === 'dark'
+                    ? 'border-primary bg-primary/10 text-primary shadow-sm'
+                    : 'border-highlight/30 hover:border-primary/40 text-muted hover:text-ink'
+                }`}
+              >
+                <div className="grid h-9 w-9 place-items-center rounded-2xl bg-purple-950/40 text-accent">
+                  <Moon size={18} />
+                </div>
+                <div>
+                  <p className="text-xs font-bold">Dreamy Dark</p>
+                  <p className="text-[10px] text-muted">Midnight Lunar</p>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setTheme('light')}
+                className={`flex items-center gap-3 rounded-2xl border p-3.5 text-left transition ${
+                  theme === 'light'
+                    ? 'border-primary bg-primary/10 text-primary shadow-sm'
+                    : 'border-highlight/30 hover:border-primary/40 text-muted hover:text-ink'
+                }`}
+              >
+                <div className="grid h-9 w-9 place-items-center rounded-xl bg-amber-100/60 text-amber-500">
+                  <Sun size={18} />
+                </div>
+                <div>
+                  <p className="text-xs font-bold">Daylight</p>
+                  <p className="text-[10px] text-muted">Soft Lily</p>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setTheme('system')}
+                className={`flex items-center gap-3 rounded-2xl border p-3.5 text-left transition ${
+                  theme === 'system'
+                    ? 'border-primary bg-primary/10 text-primary shadow-sm'
+                    : 'border-highlight/30 hover:border-primary/40 text-muted hover:text-ink'
+                }`}
+              >
+                <div className="grid h-9 w-9 place-items-center rounded-xl bg-highlight/30 text-ink">
+                  <Monitor size={18} />
+                </div>
+                <div>
+                  <p className="text-xs font-bold">System Sync</p>
+                  <p className="text-[10px] text-muted">Follows OS clock</p>
+                </div>
+              </button>
+            </div>
+          </div>
+        </Card>
+
         <Card>
           <div className="flex items-center justify-between">
             <div>
@@ -2191,7 +2263,7 @@ function Settings() {
               <h2 className="font-bold">Academic Engine Integration</h2>
               <p className="mt-0.5 text-xs text-muted">Connected to live backend at http://localhost:4000/api</p>
             </div>
-            <span className="rounded-full bg-green-100 px-3 py-1 text-xs font-bold text-green-700">Online</span>
+            <span className="rounded-full bg-green-100 px-3 py-1 text-xs font-bold text-green-700 dark:bg-green-950/40 dark:text-green-300">Online</span>
           </div>
         </Card>
       </div>

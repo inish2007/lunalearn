@@ -94,6 +94,53 @@
 
 ---
 
+## 6. [RESOLVED · P3 AI/RAG] Gemini Embedding 429 Fake Vector Elimination & Batch Insert Error Handling
+
+- **Status:** ✅ RESOLVED
+- **Root cause:**
+  - In `backend/src/services/embedding.service.ts`, when Google Gemini hit HTTP 429 (rate limits or quota exhaustion), the service previously had a fallback that generated synthetic zero/random vectors (`generateFallbackEmbedding`). Storing these synthetic vectors polluted `document_chunks` with meaningless vectors that corrupted semantic cosine similarity search.
+  - In `backend/src/services/rag-material.service.ts`, batch insertions did not fail the ingestion job cleanly when database errors occurred during chunk insertion, leaving materials in an inconsistent state.
+- **Fix applied:**
+  - Completely eliminated the silent fake vector fallback on HTTP 429 in `embedding.service.ts`. The service now cleanly throws descriptive errors indicating Gemini rate limits.
+  - In `rag-material.service.ts`, wrapped chunk batch insertion in strict error checks to ensure that any batch insertion failure marks material processing as failed with explicit diagnostic messages.
+- **Verification:**
+  - Verified in commit `98c2c1f`. Both single-chunk and multi-chunk embeddings maintain mathematical integrity; failed ingestion jobs report descriptive errors instead of polluting vector stores.
+
+---
+
+## 7. [RESOLVED · Frontend UI/UX] Theme System Integration & Hydration Resilience
+
+- **Status:** ✅ RESOLVED
+- **Context:**
+  - Integrated the "Midnight Lunar Library" (dark) and "Daylight Lavender" (light) design systems (`DESIGN.md` & `design-context.md`).
+  - Required persistent theme state without hydration flicker, proper contrast across all components, and smooth 450ms transitions.
+- **Fix applied:**
+  - Created `frontend/lib/context/ThemeContext.tsx` with `localStorage` persistence, initial system preference detection (`prefers-color-scheme`), and mounted check to eliminate hydration mismatches.
+  - Implemented `frontend/components/ThemeToggle.tsx` with sun/moon icons and smooth spring motion.
+  - Mapped tokens across `frontend/tailwind.config.ts` and `frontend/app/globals.css`.
+  - Added theme toggle to header in `frontend/components/AppShell.tsx`.
+- **Verification:**
+  - Production build (`npm run build`) succeeded with 18/18 static pages rendered without warnings or lint errors.
+  - Theme switching transitions smoothly without layout shifts or text contrast degradation.
+
+---
+
+## Current Status & Summary
+
+| Issue | Area | Root Cause | Status |
+|---|---|---|---|
+| #1 Supabase Placeholder Config | Backend (P2) | Placeholder URL caused ENOTFOUND | ✅ RESOLVED (`LocalDevStore`) |
+| #2 Gemini Key & Rate Limit Protection | AI/RAG (P3) | Unhandled 429/503 spikes | ✅ RESOLVED (offline & fallback guards) |
+| #3 Real PDF Upload Pipeline | AI/RAG ↔ Frontend | UI only uploaded metadata | ✅ RESOLVED (`multipart/form-data` pipeline) |
+| #4 RLS & Hierarchical Ownership | Backend (P2) | Missing child-parent ownership checks | ✅ RESOLVED (97/97 tests passed) |
+| #5 End-to-End AI/RAG HTTP Endpoints | AI/RAG (P3) | Unverified real endpoints | ✅ RESOLVED (50/50 assertions passed) |
+| #6 Gemini 429 Fake Vector Elimination | AI/RAG (P3) | Synthetic vectors polluted embeddings | ✅ RESOLVED (commit `98c2c1f`) |
+| #7 Theme System & Hydration Resilience | Frontend UI/UX | Missing theme toggle and token sync | ✅ RESOLVED (18/18 pages pass build) |
+
+**Total Open Blockers: 0.** All backend, AI/RAG, and frontend integrations are active and verified.
+
+---
+
 ## Notes / non-bugs (so nobody chases these)
 
 - `window.matchMedia('(prefers-reduced-motion: reduce)').matches` used in

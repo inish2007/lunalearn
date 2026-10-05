@@ -1,6 +1,6 @@
 import http from 'http';
 import { env } from '../config/env.js';
-import { SignUpSchema, SignInSchema } from '../types/auth.js';
+import { SignUpSchema, SignInSchema, UpdateProfileSettingsSchema } from '../types/auth.js';
 import { requireAuth } from '../middleware/auth.middleware.js';
 import { createScopedClient } from '../lib/scoped-client.js';
 
@@ -49,6 +49,15 @@ async function runAuthTests() {
     password: 'password123'
   });
   assert(validSignin.success, 'Valid login payload accepted');
+
+  const validProfileSettings = UpdateProfileSettingsSchema.safeParse({ available_hours_per_day: 3.5 });
+  assert(validProfileSettings.success, 'Valid daily study availability accepted');
+  assert(UpdateProfileSettingsSchema.safeParse({ available_hours_per_day: 0 }).success,
+    'Zero daily study availability accepted');
+  assert(UpdateProfileSettingsSchema.safeParse({ available_hours_per_day: null }).success,
+    'Null daily study availability resets to the default');
+  const invalidProfileSettings = UpdateProfileSettingsSchema.safeParse({ available_hours_per_day: 25 });
+  assert(!invalidProfileSettings.success, 'Daily study availability above 24 hours rejected');
 
   console.log('\n2. Testing User-Scoped Supabase Client Factory...');
   const fakeToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.fake-token';

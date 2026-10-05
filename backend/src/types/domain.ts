@@ -74,7 +74,8 @@ export const CreateTopicSchema = z.object({
   title: z.string().min(1, { message: 'Topic title is required' }).max(200),
   status: TopicStatusEnum.default('not_started'),
   is_weak: z.boolean().default(false),
-  mastery_score: z.number().min(0).max(100).default(0)
+  mastery_score: z.number().min(0).max(100).default(0),
+  estimated_study_hours: z.number().positive().nullable().optional()
 });
 
 export type CreateTopicInput = z.infer<typeof CreateTopicSchema>;
@@ -83,7 +84,8 @@ export const UpdateTopicSchema = z.object({
   title: z.string().min(1).max(200).optional(),
   status: TopicStatusEnum.optional(),
   is_weak: z.boolean().optional(),
-  mastery_score: z.number().min(0).max(100).optional()
+  mastery_score: z.number().min(0).max(100).optional(),
+  estimated_study_hours: z.number().positive().nullable().optional()
 }).refine(data => Object.keys(data).length > 0, { message: 'At least one field must be provided to update' });
 
 export type UpdateTopicInput = z.infer<typeof UpdateTopicSchema>;

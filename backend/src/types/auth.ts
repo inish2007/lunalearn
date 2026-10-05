@@ -19,6 +19,12 @@ export const SignInSchema = z.object({
 
 export type SignInInput = z.infer<typeof SignInSchema>;
 
+export const UpdateProfileSettingsSchema = z.object({
+  available_hours_per_day: z.number().min(0).max(24).nullable()
+}).strict();
+
+export type UpdateProfileSettingsInput = z.infer<typeof UpdateProfileSettingsSchema>;
+
 export interface AuthUser {
   id: string;
   email: string;

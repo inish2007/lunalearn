@@ -43,20 +43,21 @@ Every API response adheres to a consistent envelope structure:
 }
 ```
 
-### Error Response (400 / 401 / 404 / 500)
+### Error Response (400 / 401 / 404 / 422 / 500)
 ```json
 {
   "success": false,
-  "error": "ValidationError | Unauthorized | NotFound | DatabaseError",
-  "message": "Human readable detail describing what went wrong",
-  "issues": [
-    {
-      "field": "name",
-      "message": "Subject name is required"
-    }
-  ]
+  "error": {
+    "code": "CONSTRAINT_CONFLICT",
+    "message": "Preparing for DBMS Mid-sem requires 12 study hours, but only 6 hours are available before the exam.",
+    "userMessage": "The requested plan does not fit the available study time. Increase availability or revise topic estimates.",
+    "retryable": false,
+    "requestId": "req_0123456789abcdef"
+  },
+  "message": "Preparing for DBMS Mid-sem requires 12 study hours, but only 6 hours are available before the exam."
 }
 ```
+Validation errors may also include `issues` at the top level and inside `error`.
 
 ---
 
@@ -101,6 +102,7 @@ Every API response adheres to a consistent envelope structure:
       "xp": 0,
       "level": 1,
       "preferred_focus_time": "Evenings",
+      "available_hours_per_day": null,
       "created_at": "2026-09-24T18:00:00.000Z",
       "updated_at": "2026-09-24T18:00:00.000Z"
     }
@@ -164,12 +166,40 @@ Every API response adheres to a consistent envelope structure:
       "semester": 4,
       "xp": 2480,
       "level": 8,
-      "preferred_focus_time": "Evenings"
+      "preferred_focus_time": "Evenings",
+      "available_hours_per_day": 3.5
     }
   }
   ```
 
-### 3.4 Logout
+### 3.4 Update Current Student Study Availability
+- **Method**: `PATCH`
+- **Path**: `/api/auth/me`
+- **Auth**: Protected (`Bearer <token>`)
+- **Request Body**:
+  ```json
+  {
+    "available_hours_per_day": 3.5
+  }
+  ```
+- `available_hours_per_day` must be between 0 and 24; send `null` to clear the setting. Profiles with no value use the planner's 2-hour fallback.
+- **Success Response (200 OK)**:
+  ```json
+  {
+    "success": true,
+    "data": {
+      "profile": {
+        "available_hours_per_day": 3.5
+      }
+    },
+    "profile": {
+      "available_hours_per_day": 3.5
+    },
+    "message": "Profile settings updated successfully"
+  }
+  ```
+
+### 3.5 Logout
 - **Method**: `POST`
 - **Path**: `/api/auth/logout`
 - **Auth**: Protected (`Bearer <token>`)
@@ -348,6 +378,7 @@ Every API response adheres to a consistent envelope structure:
         "status": "in_progress",
         "is_weak": true,
         "mastery_score": 45.0,
+        "estimated_study_hours": 3.5,
         "created_at": "2026-09-24T18:00:00.000Z"
       }
     ]
@@ -364,7 +395,8 @@ Every API response adheres to a consistent envelope structure:
     "title": "3NF & BCNF",
     "status": "in_progress",
     "is_weak": true,
-    "mastery_score": 45.0
+    "mastery_score": 45.0,
+    "estimated_study_hours": 3.5
   }
   ```
 
@@ -376,7 +408,8 @@ Every API response adheres to a consistent envelope structure:
   {
     "status": "completed",
     "is_weak": false,
-    "mastery_score": 85.0
+    "mastery_score": 85.0,
+    "estimated_study_hours": 2.0
   }
   ```
 
@@ -757,7 +790,7 @@ Packages everything the adaptive planner and AI/RAG track needs in a **single ca
           "preferred_focus_time": "Evening (5:30 PM - 8:30 PM)",
           "daily_study_target_minutes": 120,
           "weekly_study_target_minutes": 840,
-          "available_hours_per_day": 2.0
+          "available_hours_per_day": 3.5
         }
       },
       "subjects": [
@@ -790,7 +823,8 @@ Packages everything the adaptive planner and AI/RAG track needs in a **single ca
               "title": "Boyce-Codd Normal Form",
               "status": "in_progress",
               "is_weak": true,
-              "mastery_score": 45
+              "mastery_score": 45,
+              "estimated_study_hours": 4.0
             },
             {
               "id": "top-3-uuid",
@@ -799,7 +833,8 @@ Packages everything the adaptive planner and AI/RAG track needs in a **single ca
               "title": "ACID Properties",
               "status": "completed",
               "is_weak": true,
-              "mastery_score": 55
+              "mastery_score": 55,
+              "estimated_study_hours": 3.0
             },
             {
               "id": "top-4-uuid",
@@ -808,7 +843,8 @@ Packages everything the adaptive planner and AI/RAG track needs in a **single ca
               "title": "Concurrency Control Protocols",
               "status": "not_started",
               "is_weak": false,
-              "mastery_score": 0
+              "mastery_score": 0,
+              "estimated_study_hours": 5.0
             }
           ],
           "pending_tasks": [
@@ -886,6 +922,27 @@ Packages everything the adaptive planner and AI/RAG track needs in a **single ca
       ],
       "generated_at": "2026-09-24T18:00:00.000Z"
     }
+  }
+  ```
+
+### 11.2 Strict Planner Feasibility Preflight
+- **Method**: `GET`
+- **Path**: `/api/planner/context?strict=true`
+- **Auth**: Protected (`Bearer <token>`)
+- Exams from today through 7 days away are treated as imminent. For each such exam, every weak or unfinished topic must have a student-entered `estimated_study_hours`; otherwise the endpoint returns `422 INSUFFICIENT_DATA` rather than estimating time.
+- Required hours are the sum of those topic estimates. Available time is `available_hours_per_day × days_until_exam`. If required hours exceed available time, the endpoint returns `422 CONSTRAINT_CONFLICT`. No planner context is returned for plan generation, so a caller must not fabricate or emit study slots.
+- **Constraint conflict response (422 Unprocessable Entity)**:
+  ```json
+  {
+    "success": false,
+    "error": {
+      "code": "CONSTRAINT_CONFLICT",
+      "message": "Preparing for \"DBMS Mid-sem\" requires 12.0 study hours across weak or unfinished topics, but only 6.0 hours are available before the exam. Increase your daily study availability or revise topic estimates before generating a plan.",
+      "userMessage": "The requested plan does not fit the available study time. Increase availability or revise topic estimates.",
+      "retryable": false,
+      "requestId": "req_0123456789abcdef"
+    },
+    "message": "Preparing for \"DBMS Mid-sem\" requires 12.0 study hours across weak or unfinished topics, but only 6.0 hours are available before the exam. Increase your daily study availability or revise topic estimates before generating a plan."
   }
   ```
 

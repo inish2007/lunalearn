@@ -9,6 +9,7 @@ import {
   QuizPerformanceSummary,
   StudyTimeSettings
 } from '../types/database.js';
+import { AppError } from '../types/errors.js';
 import { AcademicEngineService } from './academic-engine.service.js';
 
 export class PlannerContextService {
@@ -43,7 +44,9 @@ export class PlannerContextService {
       preferred_focus_time: profile?.preferred_focus_time || 'Evening (5:00 PM - 8:00 PM)',
       daily_study_target_minutes: 120, // 2-hour daily benchmark
       weekly_study_target_minutes: 840,
-      available_hours_per_day: 2.0
+      available_hours_per_day: profile?.available_hours_per_day == null
+        ? 2.0
+        : Number(profile.available_hours_per_day)
     };
 
     // 2. Fetch Subjects
@@ -94,7 +97,8 @@ export class PlannerContextService {
             title: t.title,
             status: t.status,
             is_weak: Boolean(t.is_weak),
-            mastery_score: t.mastery_score || 0
+            mastery_score: t.mastery_score || 0,
+            estimated_study_hours: t.estimated_study_hours == null ? null : Number(t.estimated_study_hours)
           }));
       }
 
@@ -218,5 +222,31 @@ export class PlannerContextService {
       global_risks: globalRisks,
       generated_at: now.toISOString()
     };
+  }
+
+  static assertPlanFeasible(context: PlannerContextResponse): void {
+    const availableHoursPerDay = context.student.study_time_settings.available_hours_per_day;
+
+    for (const subject of context.subjects) {
+      const imminentExams = subject.exams.filter(exam => exam.days_until_exam >= 0 && exam.days_until_exam <= 7);
+      for (const exam of imminentExams) {
+        const topics = subject.weak_and_unfinished_topics;
+        const unestimatedTopics = topics.filter(topic => topic.estimated_study_hours == null);
+        if (unestimatedTopics.length > 0) {
+          const topicTitles = unestimatedTopics.map(topic => topic.title).join(', ');
+          throw AppError.insufficientData(
+            `Add estimated study hours for these weak or unfinished topics before planning for "${exam.title}": ${topicTitles}.`
+          );
+        }
+
+        const requiredHours = topics.reduce((total, topic) => total + (topic.estimated_study_hours ?? 0), 0);
+        const availableHours = availableHoursPerDay * exam.days_until_exam;
+        if (requiredHours > availableHours) {
+          throw AppError.constraintConflict(
+            `Preparing for "${exam.title}" requires ${requiredHours.toFixed(1)} study hours across weak or unfinished topics, but only ${availableHours.toFixed(1)} hours are available before the exam. Increase your daily study availability or revise topic estimates before generating a plan.`
+          );
+        }
+      }
+    }
   }
 }

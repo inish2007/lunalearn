@@ -382,7 +382,8 @@ export async function handleDomainRoutes(req: http.IncomingMessage, res: http.Se
             title: parsed.data.title,
             status: parsed.data.status,
             is_weak: parsed.data.is_weak,
-            mastery_score: parsed.data.mastery_score
+            mastery_score: parsed.data.mastery_score,
+            estimated_study_hours: parsed.data.estimated_study_hours ?? null
           })
           .select('*')
           .single();

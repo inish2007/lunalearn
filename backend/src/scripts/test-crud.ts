@@ -82,9 +82,11 @@ async function runCrudTests() {
     title: '3NF & BCNF',
     status: 'in_progress',
     is_weak: true,
-    mastery_score: 45.0
+    mastery_score: 45.0,
+    estimated_study_hours: 3.5
   });
   assert(validTopic.success, 'Valid topic payload passes validation');
+  assert(validTopic.success && validTopic.data.estimated_study_hours === 3.5, 'Topic study-hour estimate accepted');
 
   const invalidStatusTopic = CreateTopicSchema.safeParse({
     unit_id: fakeUuid,
@@ -93,8 +95,9 @@ async function runCrudTests() {
   });
   assert(!invalidStatusTopic.success, 'Invalid topic status enum rejected');
 
-  const validTopicUpdate = UpdateTopicSchema.safeParse({ status: 'completed', is_weak: false });
+  const validTopicUpdate = UpdateTopicSchema.safeParse({ status: 'completed', is_weak: false, estimated_study_hours: 2 });
   assert(validTopicUpdate.success, 'Topic status update accepted');
+  assert(!UpdateTopicSchema.safeParse({ estimated_study_hours: 0 }).success, 'Rejects non-positive topic estimate');
 
   console.log('\n5. Testing Task Schemas...');
   const validTask = CreateTaskSchema.safeParse({

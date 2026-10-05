@@ -3,6 +3,7 @@ import { requireAuth } from '../middleware/auth.middleware.js';
 import { PlannerContextService } from '../services/planner-context.service.js';
 import { AppError } from '../types/errors.js';
 import { sendSuccess, sendError } from './domain.routes.js';
+import { sendStandardError } from '../lib/response.js';
 
 export async function handlePlannerRoutes(req: http.IncomingMessage, res: http.ServerResponse): Promise<boolean> {
   const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
@@ -47,18 +48,18 @@ export async function handlePlannerRoutes(req: http.IncomingMessage, res: http.S
           // If query specifies strict validation or generating a schedule
           const strictCheck = url.searchParams.get('strict') === 'true';
           if (strictCheck && context.subjects.length === 0) {
-            return sendError(
-              res,
-              'INSUFFICIENT_DATA',
-              'Student has no registered subjects or syllabus topics to generate a study schedule.',
-              422
-            );
+            return sendStandardError(res, AppError.insufficientData(
+              'Student has no registered subjects or syllabus topics to generate a study schedule.'
+            ));
+          }
+          if (strictCheck) {
+            PlannerContextService.assertPlanFeasible(context);
           }
 
           return sendSuccess(res, context);
         } catch (err: unknown) {
           if (err instanceof AppError) {
-            return sendError(res, err.code, err.message, err.statusCode);
+            return sendStandardError(res, err);
           }
           const msg = err instanceof Error ? err.message : 'Error generating adaptive planner context';
           return sendError(res, 'PLANNER_FAILURE', msg, 500);

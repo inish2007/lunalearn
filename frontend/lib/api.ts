@@ -699,6 +699,7 @@ export const api = {
         subject_id: string;
         topic_id?: string | null;
         material_id?: string | null;
+        difficulty?: 'easy' | 'medium' | 'hard' | 'adaptive';
         question_type?: 'multiple_choice' | 'short_answer' | 'mixed';
         num_questions?: number;
       },
@@ -715,6 +716,7 @@ export const api = {
       payload: {
         subject_id: string;
         topic_id?: string | null;
+        quiz_id: string;
         answers: Array<{
           question_id?: string;
           question?: string;

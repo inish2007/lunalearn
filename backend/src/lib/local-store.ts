@@ -1,4 +1,5 @@
 import fs from 'fs';
+import { evaluateQuiz } from './quiz-scoring.js';
 import path from 'path';
 import crypto from 'crypto';
 import { User, Session, SupabaseClient } from '@supabase/supabase-js';
@@ -31,6 +32,7 @@ interface LocalDatabaseState {
   document_chunks: DocumentChunk[];
   quiz_results: QuizResult[];
   study_sessions: StudySession[];
+  quiz_runs: any[];
 }
 
 function getInitialState(): LocalDatabaseState {
@@ -45,6 +47,7 @@ function getInitialState(): LocalDatabaseState {
     materials: [],
     document_chunks: [],
     quiz_results: [],
+    quiz_runs: [],
     study_sessions: []
   };
 }
@@ -86,7 +89,7 @@ export class LocalDevStore {
         const raw = fs.readFileSync(this.storageFilePath, 'utf8');
         const parsed = JSON.parse(raw);
         if (parsed && Array.isArray(parsed.profiles) && Array.isArray(parsed.subjects)) {
-          return parsed;
+          return { ...getInitialState(), ...parsed };
         }
       }
     } catch (err) {
@@ -101,9 +104,11 @@ export class LocalDevStore {
     try {
       const dir = path.dirname(this.storageFilePath);
       if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-      fs.writeFileSync(this.storageFilePath, JSON.stringify(stateToSave, null, 2), 'utf8');
+      const temporary = this.storageFilePath + '.tmp';
+      fs.writeFileSync(temporary, JSON.stringify(stateToSave, null, 2), 'utf8');
+      fs.renameSync(temporary, this.storageFilePath);
     } catch (err) {
-      console.warn('⚠️ Could not save local-db.json:', err);
+      throw err;
     }
   }
 
@@ -372,7 +377,7 @@ export class LocalDevStore {
     if (tableName === 'profiles') {
       return row.id === userId;
     }
-    if (['subjects', 'exams', 'tasks', 'materials', 'document_chunks', 'quiz_results', 'study_sessions'].includes(tableName)) {
+    if (['subjects', 'exams', 'tasks', 'materials', 'document_chunks', 'quiz_results', 'quiz_runs', 'study_sessions'].includes(tableName)) {
       return row.profile_id === userId;
     }
     if (tableName === 'units') {
@@ -400,6 +405,23 @@ export class LocalDevStore {
     const self = this;
 
     const mockClient: any = {
+      rpc: async (name: string, args: any) => {
+        if (name !== 'submit_quiz_run') return mockClient.searchRpc(name,args);
+        const before = structuredClone(self.state);
+        try {
+          const run = self.state.quiz_runs.find(r => r.id === args.p_quiz_id && r.profile_id === scopedUserId);
+          if (!run) throw new Error('Quiz not found');
+          if (run.result) return { data: run.result, error: null };
+          const result = evaluateQuiz(run, args.p_answers);
+          self.state.quiz_results.push({ id: result.quiz_result_id, profile_id: scopedUserId!, subject_id: run.subject_id, topic_id: run.topic_id, score: result.score, total_questions: result.total_questions, correct_answers: result.correct_answers, weak_topics_identified: result.weak_topics_identified, created_at: result.created_at });
+          for (const q of result.question_evaluations) if (!q.is_correct && q.topic_id) {
+            const topic = self.state.topics.find(t => t.id === q.topic_id && self.rowBelongsToUser('topics', t, scopedUserId!));
+            if (topic) topic.is_weak = true;
+          }
+          run.result = result; self.saveState();
+          return { data: result, error: null };
+        } catch (error) { self.state = before; return { data: null, error }; }
+      },
       auth: {
         getUser: async (tok?: string) => {
           try {
@@ -438,7 +460,7 @@ export class LocalDevStore {
         }
       },
 
-      rpc: async (fnName: string, args: any) => {
+      searchRpc: async (fnName: string, args: any) => {
         if (fnName === 'match_document_chunks') {
           const chunks = self.state.document_chunks || [];
           const profileId = args.filter_profile_id;
@@ -591,7 +613,7 @@ export class LocalDevStore {
         const now = new Date().toISOString();
         const arr = (Array.isArray(rows) ? rows : [rows]).map(row => ({
           id: row.id || crypto.randomUUID(),
-          ...(scopedUserId && !row.profile_id && ['subjects', 'exams', 'tasks', 'materials', 'document_chunks', 'quiz_results', 'study_sessions'].includes(tableName)
+          ...(scopedUserId && !row.profile_id && ['subjects', 'exams', 'tasks', 'materials', 'document_chunks', 'quiz_results', 'quiz_runs', 'study_sessions'].includes(tableName)
             ? { profile_id: scopedUserId }
             : {}),
           created_at: row.created_at || now,

@@ -1579,3 +1579,5 @@ Readiness now includes `basis`: topics {completed,total}, quizzes {count,limit:1
 GET /api/materials/:id/content requires Bearer auth and owned metadata. Returns application/pdf bytes with private/no-store headers; missing originals return 404. Storage failures no longer claim success or silently switch storage backends.
 
 ### Phase 3: assistant response fields unchanged; sources retained by UI; is_fallback accurately identifies circuit-breaker fallback. OCR remains deferred.
+
+### Phase 4: generate accepts difficulty easy/medium/hard/adaptive; missing usable material returns INSUFFICIENT_DATA. Generation returns quiz_id and hides correct_answer/explanation until scoring. Submit now REQUIRES quiz_id and exactly one question_id/user_answer per question; legacy client answer keys are ignored. Submission is idempotent per persisted run. is_fallback=false only for validated Gemini questions; provider failures return errors. Live stores require quiz_runs migration.

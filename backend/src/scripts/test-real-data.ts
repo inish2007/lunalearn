@@ -19,6 +19,15 @@ try {
   assert.ok((await store.createClient('student-b').storage.from('materials').download('student-a/subject/notes.pdf')).error);
   assert.ok((await db.storage.from('materials').download('student-a/../escape')).error);
   assert.ok((await db.storage.from('materials').download('student-a/missing.pdf')).error);
+  const runId='11111111-1111-4111-8111-111111111111';
+  await (db as any).from('quiz_runs').insert({id:runId,profile_id:'student-a',subject_id:'subject',questions:[{id:'q1',question:'A real question',type:'multiple_choice',correct_answer:'A',explanation:'Evidence',topic_title:'Concept'}]});
+  const submitted=await (db as any).rpc('submit_quiz_run',{p_quiz_id:runId,p_answers:[{question_id:'q1',user_answer:'B',correct_answer:'B'}]});
+  assert.equal(submitted.data.score,0,'Client answer keys must be ignored');
+  store.reloadState();
+  const replay=await (db as any).rpc('submit_quiz_run',{p_quiz_id:runId,p_answers:[{question_id:'q1',user_answer:'A'}]});
+  assert.equal(replay.data.quiz_result_id,submitted.data.quiz_result_id);
+  assert.equal(replay.data.score,0);
+  assert.ok((await (store.createClient('student-b') as any).rpc('submit_quiz_run',{p_quiz_id:runId,p_answers:[]})).error);
   store.reloadState();
   assert.deepEqual((await db.storage.from('materials').download('student-a/subject/notes.pdf')).data, bytes);
   assert.equal(Engine.calculateTopicCompletion([]), 0);

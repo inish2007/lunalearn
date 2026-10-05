@@ -136,3 +136,5 @@ Readiness exposes actual input counts, latest-10 quiz sample and rolling seven-d
 Actual local PDF bytes now persist, with scoped path checks and authenticated content retrieval. My Materials opens an in-app preview/download dialog. Missing legacy originals request re-upload. Both typechecks passed; isolated storage/formula tests added. Live Supabase remains unverified.
 
 ### Phase 3: assistant Markdown, material scope, preserved PDF citations, and truthful circuit-breaker fallback implemented. OCR design saved in docs/OCR-PLAN.md only. Markdown libraries added; raw HTML disabled.
+
+### Phase 4: quizzes now require indexed material, use full bounded source chunks, difficulty and history checks, validate source references and exact question sets. Persisted runs score server-held answers through an atomic submit RPC/local equivalent. Provider failure returns an explicit error, never canned questions. Apply 20261006000001_quiz_runs.sql for live Supabase. Live Gemini verification pending.

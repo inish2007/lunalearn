@@ -11,6 +11,7 @@ export const GenerateQuizSchema = z.object({
   topic_id: z.string().uuid('topic_id must be a valid UUID').optional().nullable(),
   material_id: z.string().uuid('material_id must be a valid UUID').optional().nullable(),
   question_type: QuestionTypeEnum.optional().default('multiple_choice'),
+  difficulty: z.enum(['easy', 'medium', 'hard', 'adaptive']).optional(),
   num_questions: z.number().int().min(1).max(10).optional().default(5)
 });
 
@@ -25,7 +26,7 @@ export const SubmitQuizAnswerItemSchema = z
     question: z.string().optional(),
     user_answer: z.string().optional(),
     selected_answer: z.string().optional(),
-    correct_answer: z.string().min(1, 'correct_answer is required'),
+    correct_answer: z.string().optional(),
     explanation: z.string().optional(),
     topic_id: z.string().uuid().optional().nullable(),
     topic_title: z.string().optional().nullable()
@@ -47,6 +48,7 @@ export type SubmitQuizAnswerItem = z.infer<typeof SubmitQuizAnswerItemSchema>;
  * Schema for submitting quiz answers to be scored and recorded in quiz_results (POST /api/quiz/submit).
  */
 export const SubmitQuizSchema = z.object({
+  quiz_id: z.string().uuid().optional(),
   subject_id: z.string().uuid('subject_id must be a valid UUID'),
   topic_id: z.string().uuid('topic_id must be a valid UUID').optional().nullable(),
   answers: z.array(SubmitQuizAnswerItemSchema).min(1, 'At least one answer must be submitted'),

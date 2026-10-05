@@ -1646,8 +1646,13 @@ function Exams() {
 // 7. QUIZZES (/quizzes)
 // ============================================================================
 function Quizzes() {
-  const { plannerContext, subjects, refreshAll } = useAcademic();
+  const [difficulty, setDifficulty] = useState<'easy'|'medium'|'hard'|'adaptive'>('adaptive');
+  const [quizMaterial, setQuizMaterial] = useState('');
+  const [quizTopic, setQuizTopic] = useState('');
+  const [questionCount, setQuestionCount] = useState(5);
+  const { plannerContext, subjects, materials, topics, loadUnitsAndTopics, refreshAll } = useAcademic();
   const [selectedSubId, setSelectedSubId] = useState<string>(subjects[0]?.id || '');
+  useEffect(() => { if (selectedSubId) void loadUnitsAndTopics(selectedSubId); }, [selectedSubId, loadUnitsAndTopics]);
   const [generating, setGenerating] = useState(false);
   const [quiz, setQuiz] = useState<GenerateQuizResponseData | null>(null);
   const [answers, setAnswers] = useState<Record<string, string>>({});
@@ -1670,7 +1675,8 @@ function Quizzes() {
       const q = await api.quiz.generate({
         subject_id: selectedSubId,
         question_type: 'multiple_choice',
-        num_questions: 5
+        difficulty, material_id: quizMaterial || null, topic_id: quizTopic || null,
+        num_questions: questionCount
       });
       setQuiz(q);
     } catch (err: unknown) {
@@ -1697,7 +1703,7 @@ function Quizzes() {
         topic_id: q.topic_id ?? null,
         topic_title: q.topic_title
       }));
-      const res = await api.quiz.submit({ subject_id: quiz.subject_id, answers: payloadAnswers });
+      const res = await api.quiz.submit({ quiz_id: quiz.quiz_id, subject_id: quiz.subject_id, answers: payloadAnswers });
       setResult(res);
       await refreshAll();
     } catch (err: unknown) {
@@ -1733,6 +1739,12 @@ function Quizzes() {
 
   return (
     <>
+      <div className="mb-4 flex flex-wrap gap-3 text-sm">
+        <label>Difficulty <select className="rounded border bg-card p-2" value={difficulty} onChange={e=>setDifficulty(e.target.value as typeof difficulty)}>{['adaptive','easy','medium','hard'].map(d=><option key={d}>{d}</option>)}</select></label>
+        <label>Questions <input className="w-16 rounded border bg-card p-2" type="number" min="1" max="10" value={questionCount} onChange={e=>setQuestionCount(Math.max(1,Math.min(10,Number(e.target.value))))}/></label>
+        <label>Material <select className="rounded border bg-card p-2" value={quizMaterial} onChange={e=>setQuizMaterial(e.target.value)}><option value="">All indexed PDFs</option>{materials.filter(m=>m.subject_id===selectedSubId && m.processed).map(m=><option value={m.id} key={m.id}>{m.name}</option>)}</select></label>
+        <label>Topic <select className="rounded border bg-card p-2" value={quizTopic} onChange={e=>setQuizTopic(e.target.value)}><option value="">Varied concepts</option>{(plannerContext?.subjects.find(s=>s.subject_id===selectedSubId)?.weak_and_unfinished_topics || []).map(t=><option value={t.id} key={t.id}>{t.title}</option>)}</select></label>
+      </div>
       <PageHeader
         eyebrow="Practice with feedback"
         title="Quizzes & exam simulator"

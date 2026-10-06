@@ -500,7 +500,7 @@ export const api = {
         body: JSON.stringify(payload)
       });
     },
-    update(id: string, payload: Partial<{ title: string; priority: string; due_date: string | null; is_completed: boolean }>, etag?: string) {
+    update(id: string, payload: Partial<{ title: string; subject_id: string | null; type: string; priority: string; due_date: string | null; is_completed: boolean }>, etag?: string) {
       return request<Task>(`/tasks/${encodeURIComponent(id)}`, {
         method: 'PATCH',
         body: JSON.stringify(payload),

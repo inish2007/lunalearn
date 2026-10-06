@@ -144,3 +144,6 @@ Actual local PDF bytes now persist, with scoped path checks and authenticated co
 ### Phase 6: authenticated session logging/history and immutable XP ledger added with atomic SQL triggers/RPC and local rollback/persistence. First topic=50, quiz=round(score/5), five-minute session units capped at24/day; 500 XP/level. Profile/Planner expose logging, history and basis. Additive activity migration required for Supabase; completed real topics/sessions backfill idempotently; unverified legacy quizzes excluded.
 
 ### Phase 7: server rejects new/changed past exam dates; existing history stays readable with Exam has passed. Shared local-day countdown formatting; upcoming dashboard/planner feeds exclude expired exams; same-day feasibility uses remaining time. Timestamp validation is covered by phase tests.
+
+### Phase 8
+Tasks and Exams now have shared functional edit/create forms, error/pending states, subject/search filters, task priority/type sorting and Today/Upcoming/Overdue/Completed views; exam history and preparation checklist with scoped study links. Existing PATCH/ETag contracts reused.

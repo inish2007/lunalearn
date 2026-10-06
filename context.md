@@ -156,3 +156,6 @@ Tasks and Exams now have shared functional edit/create forms, error/pending stat
 
 ### Phase 12
 Dashboard redesigned around nearest exam/readiness basis, logged study, next scheduled block, actionable tasks, and a functional month calendar. Calendar combines persisted exams/tasks/sessions and clearly labeled generated blocks, supports month/Today/date selection and agenda completion links. Responsive layout preserves mobile priority order.
+
+### Phase 13
+Natural-language command design documented in docs/NATURAL-LANGUAGE-COMMANDS-PLAN.md: typed intents, scoped name resolution, write previews, idempotency and material-move requirements. No command runtime or folder schema implemented.

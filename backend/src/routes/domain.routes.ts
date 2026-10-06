@@ -529,6 +529,7 @@ export async function handleDomainRoutes(req: http.IncomingMessage, res: http.Se
             type: parsed.data.type,
             priority: parsed.data.priority,
             due_date: parsed.data.due_date ?? null,
+            estimated_minutes: parsed.data.estimated_minutes ?? null,
             is_completed: parsed.data.is_completed
           })
           .select('*')

@@ -461,13 +461,13 @@ export const api = {
     get(id: string, signal?: AbortSignal) {
       return request<Topic>(`/topics/${encodeURIComponent(id)}`, { signal });
     },
-    create(payload: { unit_id: string; title: string; status?: string; is_weak?: boolean; mastery_score?: number }) {
+    create(payload: { unit_id: string; title: string; status?: string; is_weak?: boolean; mastery_score?: number; estimated_study_hours?: number | null }) {
       return request<Topic>('/topics', {
         method: 'POST',
         body: JSON.stringify(payload)
       });
     },
-    update(id: string, payload: Partial<{ title: string; status: string; is_weak: boolean; mastery_score: number }>, etag?: string) {
+    update(id: string, payload: Partial<{ title: string; status: string; is_weak: boolean; mastery_score: number; estimated_study_hours: number | null }>, etag?: string) {
       return request<Topic>(`/topics/${encodeURIComponent(id)}`, {
         method: 'PATCH',
         body: JSON.stringify(payload),
@@ -495,13 +495,13 @@ export const api = {
     get(id: string, signal?: AbortSignal) {
       return request<Task>(`/tasks/${encodeURIComponent(id)}`, { signal });
     },
-    create(payload: { title: string; subject_id?: string | null; type?: string; priority?: string; due_date?: string | null; is_completed?: boolean }) {
+    create(payload: { title: string; subject_id?: string | null; type?: string; priority?: string; estimated_minutes?: number | null; due_date?: string | null; is_completed?: boolean }) {
       return request<Task>('/tasks', {
         method: 'POST',
         body: JSON.stringify(payload)
       });
     },
-    update(id: string, payload: Partial<{ title: string; subject_id: string | null; type: string; priority: string; due_date: string | null; is_completed: boolean }>, etag?: string) {
+    update(id: string, payload: Partial<{ title: string; subject_id: string | null; type: string; estimated_minutes: number | null; priority: string; due_date: string | null; is_completed: boolean }>, etag?: string) {
       return request<Task>(`/tasks/${encodeURIComponent(id)}`, {
         method: 'PATCH',
         body: JSON.stringify(payload),

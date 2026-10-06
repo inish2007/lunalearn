@@ -1,3 +1,4 @@
+import { ScheduleService } from './schedule.service.js';
 import { SupabaseClient } from '@supabase/supabase-js';
 import {
   Database,
@@ -149,6 +150,7 @@ export class PlannerContextService {
           priority: t.priority,
           due_date: t.due_date,
           days_until_due: daysUntilDue,
+          estimated_minutes: t.estimated_minutes ?? null,
           is_completed: Boolean(t.is_completed)
         };
       });
@@ -212,14 +214,15 @@ export class PlannerContextService {
         priority: t.priority,
         due_date: t.due_date,
         days_until_due: daysUntilDue,
-        is_completed: Boolean(t.is_completed)
+        estimated_minutes: t.estimated_minutes ?? null,
+          is_completed: Boolean(t.is_completed)
       };
     });
 
     // 5. Global risks across subjects
     const globalRisks = await AcademicEngineService.evaluateAllStudentRisks(db);
 
-    return {
+    const context: PlannerContextResponse = {
       student: {
         id: userId,
         full_name: profile?.full_name || null,
@@ -232,31 +235,15 @@ export class PlannerContextService {
       global_risks: globalRisks,
       generated_at: now.toISOString()
     };
+    const sessions=await client.from('study_sessions').select('*');
+    if(sessions.error)throw AppError.internal('Could not load sessions',sessions.error);
+    context.study_plan=ScheduleService.build(context,sessions.data || [],now);
+    return context;
   }
 
   static assertPlanFeasible(context: PlannerContextResponse): void {
-    const availableHoursPerDay = context.student.study_time_settings.available_hours_per_day;
-
-    for (const subject of context.subjects) {
-      const imminentExams = subject.exams.filter(exam => exam.days_until_exam >= 0 && exam.days_until_exam <= 7);
-      for (const exam of imminentExams) {
-        const topics = subject.weak_and_unfinished_topics;
-        const unestimatedTopics = topics.filter(topic => topic.estimated_study_hours == null);
-        if (unestimatedTopics.length > 0) {
-          const topicTitles = unestimatedTopics.map(topic => topic.title).join(', ');
-          throw AppError.insufficientData(
-            `Add estimated study hours for these weak or unfinished topics before planning for "${exam.title}": ${topicTitles}.`
-          );
-        }
-
-        const requiredHours = topics.reduce((total, topic) => total + (topic.estimated_study_hours ?? 0), 0);
-        const availableHours = Math.min(availableHoursPerDay * Math.max(1, exam.days_until_exam), Math.max(0, (Date.parse(exam.exam_date) - Date.now()) / 3600000));
-        if (requiredHours > availableHours) {
-          throw AppError.constraintConflict(
-            `Preparing for "${exam.title}" requires ${requiredHours.toFixed(1)} study hours across weak or unfinished topics, but only ${availableHours.toFixed(1)} hours are available before the exam. Increase your daily study availability or revise topic estimates before generating a plan.`
-          );
-        }
-      }
-    }
+    const plan=context.study_plan || ScheduleService.build(context);
+    if(plan.status==='insufficient_data')throw AppError.insufficientData(plan.issues.join(' '));
+    if(plan.status==='constraint_conflict')throw AppError.constraintConflict(plan.issues.join(' '));
   }
 }

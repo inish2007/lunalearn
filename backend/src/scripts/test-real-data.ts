@@ -1,3 +1,4 @@
+import { ScheduleService } from '../services/schedule.service.js';
 import { SimulationService } from '../services/simulation.service.js';
 import { CreateExamSchema, UpdateExamSchema } from '../types/domain.js';
 import assert from 'node:assert/strict';
@@ -50,6 +51,13 @@ try {
   const simulated=await SimulationService.simulate(db,'student-a',{subject_id:'subject',additional_minutes:60,completed_topic_ids:[]});
   assert.equal(simulated.delta,0,'Revision already saturated');
   assert.equal(JSON.stringify(store.reloadState()),before,'Simulation must not mutate');
+  const fixture:any={student:{study_time_settings:{available_hours_per_day:1,focus_start:'10:00',focus_end:'11:00',timezone:'UTC'}},subjects:[{subject_id:'one',exams:[{exam_date:'2026-10-06T12:00:00Z'}],weak_and_unfinished_topics:[{id:'t1',title:'Topic1',status:'in_progress',is_weak:true,estimated_study_hours:1}],pending_tasks:[]},{subject_id:'two',exams:[{exam_date:'2026-10-06T12:00:00Z'}],weak_and_unfinished_topics:[{id:'t2',title:'Topic2',status:'in_progress',estimated_study_hours:1}],pending_tasks:[]}],unassigned_pending_tasks:[]};
+  assert.equal(ScheduleService.build(fixture,[],new Date('2026-10-06T09:00:00Z')).status,'constraint_conflict','Subjects must share one daily budget');
+  fixture.subjects.pop();
+  const schedule=ScheduleService.build(fixture,[],new Date('2026-10-06T09:00:00Z'));
+  assert.equal(schedule.status,'ready');assert.equal(schedule.blocks.reduce((n,b)=>n+b.minutes,0),60);
+  fixture.subjects[0].weak_and_unfinished_topics[0].estimated_study_hours=null;
+  assert.equal(ScheduleService.build(fixture,[],new Date('2026-10-06T09:00:00Z')).status,'insufficient_data');
   console.log('Real-data formulas and storage: passed');
 } finally { process.chdir(original); fs.rmSync(temp, { recursive:true, force:true }); }
 

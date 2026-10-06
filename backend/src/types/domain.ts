@@ -104,6 +104,7 @@ export const PriorityLevelEnum = z.preprocess(
 );
 
 export const CreateTaskSchema = z.object({
+  estimated_minutes: z.number().int().positive().max(10080).nullable().optional(),
   title: z.string().min(1, { message: 'Task title is required' }).max(250),
   subject_id: z.string().uuid({ message: 'subject_id must be a valid UUID' }).optional().nullable(),
   type: TaskTypeEnum.default('Task'),
@@ -115,6 +116,7 @@ export const CreateTaskSchema = z.object({
 export type CreateTaskInput = z.infer<typeof CreateTaskSchema>;
 
 export const UpdateTaskSchema = z.object({
+  estimated_minutes: z.number().int().positive().max(10080).nullable().optional(),
   title: z.string().min(1).max(250).optional(),
   subject_id: z.string().uuid().optional().nullable(),
   type: TaskTypeEnum.optional(),

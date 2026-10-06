@@ -63,6 +63,7 @@ export interface Topic {
 }
 
 export interface Task {
+  estimated_minutes?: number | null;
   id: string;
   profile_id: string;
   subject_id: string | null;
@@ -211,6 +212,7 @@ export interface TopicSummary {
 }
 
 export interface TaskSummary {
+  estimated_minutes?: number | null;
   id: string;
   title: string;
   type: TaskType;
@@ -245,6 +247,7 @@ export interface SubjectPlannerContext {
 }
 
 export interface PlannerContextResponse {
+  study_plan?: {status:'ready'|'insufficient_data'|'constraint_conflict';blocks:Array<{id:string;subject_id:string|null;topic_id?:string;task_id?:string;title:string;reason:string;start:string;end:string;minutes:number}>;issues:string[];required_hours:number;available_hours:number;generated_at:string};
   student: {
     id: string;
     full_name: string | null;

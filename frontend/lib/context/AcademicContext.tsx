@@ -34,7 +34,7 @@ export interface AcademicDataSnapshot {
   plannerContext: PlannerContextResponse | null;
 }
 
-export type TopicUpdatePatch = Partial<{ title: string; status: string; is_weak: boolean; mastery_score: number }>;
+export type TopicUpdatePatch = Partial<{ title: string; status: string; is_weak: boolean; mastery_score: number; estimated_study_hours: number | null }>;
 
 export class TopicUpdateConflictError extends ClientAppError {
   constructor(

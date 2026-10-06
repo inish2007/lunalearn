@@ -1,4 +1,6 @@
 'use client';
+import { PlannerView } from './PlannerView';
+import { TopicEstimate } from './TopicEstimate';
 import { SettingsView } from './SettingsView';
 import { SimulatorView } from './SimulatorView';
 import { Productivity } from './Productivity';
@@ -423,6 +425,7 @@ function Learning() {
                                   <span className={`font-semibold ${t.status === 'completed' ? 'text-muted line-through' : 'text-deep'}`}>
                                     {t.title}
                                   </span>
+                                  <TopicEstimate topic={t} subjectId={activeSubject.id} />
                                   {t.is_weak && (
                                     <span className="rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-bold text-red-700">
                                       Weak
@@ -897,6 +900,7 @@ function Assistant() {
   ]);
   const [timeoutRetry, setTimeoutRetry] = useState<{ prompt: string; message: string } | null>(null);
 
+  useEffect(()=>{const id=new URLSearchParams(location.search).get('subject');if(id)setSelectedSubId(id);},[]);
   const activeSub = subjects.find(s => s.id === selectedSubId) || subjects[0];
   const activeMaterials = materials.filter(m => !selectedSubId || m.subject_id === selectedSubId);
 
@@ -1084,124 +1088,8 @@ function Assistant() {
 // ============================================================================
 function Tasks() { return <Productivity kind="tasks" />; }
 
-function Planner() {
-  const { plannerContext, subjects, exams, tasks, risks } = useAcademic();
-  const [constraintConflict, setConstraintConflict] = useState<ClientAppError | null>(null);
+function Planner() { return <PlannerView />; }
 
-  const settings = plannerContext?.student?.study_time_settings;
-  const now = new Date();
-
-  useEffect(() => {
-    if (subjects.length === 0 || !plannerContext) {
-      setConstraintConflict(null);
-      return;
-    }
-
-    const controller = new AbortController();
-    let active = true;
-    setConstraintConflict(null);
-
-    api.planner.getContext(undefined, controller.signal, true).catch((err: unknown) => {
-      if (!active || (err instanceof Error && err.name === 'AbortError')) return;
-      if (err instanceof ClientAppError && err.code === 'CONSTRAINT_CONFLICT') {
-        setConstraintConflict(err);
-      }
-    });
-
-    return () => {
-      active = false;
-      controller.abort();
-    };
-  }, [plannerContext?.generated_at, subjects.length]);
-
-  return (
-    <>
-      <StudyActivity />
-      <PageHeader
-        eyebrow="Adaptive daily plan"
-        title="Your study planner"
-        description="Built around your exams, deadlines, weak areas, available time and recent performance."
-      />
-
-      <div className="grid gap-5 xl:grid-cols-[1.2fr_.8fr]">
-        <div className="space-y-5">
-          <Card>
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h2 className="font-bold">Your focused timeline</h2>
-                <p className="mt-0.5 text-xs text-muted">
-                  Preferred focus window: {settings?.preferred_focus_time || 'Evening'}
-                </p>
-              </div>
-              <span className="rounded-xl bg-purple-50 px-3 py-1 text-xs font-bold text-primary">
-                {settings?.available_hours_per_day ?? 2.0}h daily goal
-              </span>
-            </div>
-
-            {constraintConflict ? (
-              <div role="alert" className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
-                <h3 className="font-bold">This schedule isn&apos;t achievable with your available time</h3>
-                <p className="mt-2 leading-6">{constraintConflict.userMessage || constraintConflict.message}</p>
-                <p className="mt-2 text-xs leading-5">
-                  Move the exam date, revise the weak or unfinished topics, or increase your available study hours per day.
-                </p>
-              </div>
-            ) : subjects.length === 0 ? (
-              <div className="py-8 text-center text-xs text-muted">
-                Add courses and exams to generate a tailored timeline.
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {subjects.slice(0, 3).map((s, idx) => {
-                  const subTasks = tasks.filter(t => t.subject_id === s.id && !t.is_completed);
-                  return (
-                    <div key={s.id} className="flex gap-4 items-center">
-                      <span className="w-16 text-xs font-bold text-muted">Slot {idx + 1}</span>
-                      <div className="flex-1 rounded-2xl bg-canvas border border-highlight/40 p-4">
-                        <p className="text-sm font-bold">{s.name}</p>
-                        <p className="text-xs text-muted mt-1">
-                          {subTasks.length > 0
-                            ? `Focus on: ${subTasks[0].title}`
-                            : 'Review core topics and log practice'}
-                        </p>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </Card>
-        </div>
-
-        <div className="space-y-5">
-          <Card>
-            <h2 className="font-bold">Why this plan?</h2>
-            {risks.length > 0 ? (
-              <div className="mt-4 space-y-3">
-                {risks.map((r, i) => (
-                  <div key={i} className="flex gap-3 items-start">
-                    <span className="grid h-6 w-6 place-items-center rounded-full bg-highlight/45 text-xs font-bold text-primary shrink-0">
-                      {i + 1}
-                    </span>
-                    <p className="text-xs text-muted leading-relaxed">{r.reason}</p>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="mt-3 text-xs text-muted">
-                Your study timeline dynamically adapts to your pending assignments and upcoming exams.
-              </p>
-            )}
-          </Card>
-        </div>
-      </div>
-    </>
-  );
-}
-
-// ============================================================================
-// 6. EXAMS & READINESS (/exams)
-// ============================================================================
 function Exams() { return <Productivity kind="exams" />; }
 
 function Quizzes() {

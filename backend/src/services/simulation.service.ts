@@ -1,3 +1,4 @@
+import { ScheduleService } from './schedule.service.js';
 import { z } from 'zod';
 import { AcademicEngineService as Engine } from './academic-engine.service.js';
 import { PlannerContextService } from './planner-context.service.js';
@@ -17,11 +18,13 @@ export class SimulationService {
   const breakdown={...baseline.breakdown,topic_completion:Engine.calculateTopicCompletion(hypothetical),revision_activity:Engine.calculateRevisionActivity([{duration_minutes:(baseline.basis?.revision.minutes || 0)+input.additional_minutes,session_type:'focus'}])};
   if(input.available_hours_per_day!==undefined)context.student.study_time_settings.available_hours_per_day=input.available_hours_per_day;
   subject.weak_and_unfinished_topics=subject.weak_and_unfinished_topics.filter(t=>!input.completed_topic_ids.includes(t.id) || t.is_weak);
+  const sessions=await db.from('study_sessions').select('*');
+  if(sessions.error)throw AppError.internal('Could not load sessions');
+  context.study_plan=ScheduleService.build(context,sessions.data || []);
   let feasible=true,reason='The scenario fits the current feasibility rules.';
   try {PlannerContextService.assertPlanFeasible(context);}catch(e){feasible=false;reason=e instanceof Error?e.message:'Insufficient data';}
-  const required=subject.weak_and_unfinished_topics.some(t=>t.estimated_study_hours==null)?null:subject.weak_and_unfinished_topics.reduce((n,t)=>n+(t.estimated_study_hours || 0),0);
-  const next=subject.exams[0];
-  const available=next?Math.min(context.student.study_time_settings.available_hours_per_day*Math.max(1,next.days_until_exam),Math.max(0,(Date.parse(next.exam_date)-Date.now())/3600000)):null;
+  const required=context.study_plan.required_hours;
+  const available=context.study_plan.available_hours;
   const projected=Engine.calculateWeightedReadiness(breakdown);
   return {baseline:baseline.readiness_percentage,projected,delta:projected-baseline.readiness_percentage,baseline_breakdown:baseline.breakdown,projected_breakdown:breakdown,required_hours:required,available_hours:available,feasible,reason,assumptions:['Hypothetical activity only; nothing saved.','Quiz scores and assignment completion remain unchanged.','Revision is capped at 120 minutes in the rolling seven-day window.','Completing a topic does not clear its weak marker.']};
  }

@@ -1,3 +1,5 @@
+import { SimulationService } from '../services/simulation.service.js';
+import { CreateExamSchema, UpdateExamSchema } from '../types/domain.js';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -40,6 +42,14 @@ try {
   assert.ok((await (db as any).rpc('log_study_session',{p_session:{...session,id:'session-2'}})).error,'Overlap rejected');
   const ledger=await (db as any).from('xp_events').select('*');assert.equal(ledger.data.filter((e:any)=>e.activity_key.startsWith('session:')).reduce((n:number,e:any)=>n+e.amount,0),24);
   const again=await (db as any).rpc('log_study_session',{p_session:session});assert.equal(again.data.id,session.id);
+  const future=new Date(Date.now()+86400000).toISOString();
+  assert.equal(CreateExamSchema.safeParse({subject_id:'11111111-1111-4111-8111-111111111111',title:'Exam',exam_date:'2024-01-01T00:00:00Z'}).success,false);
+  assert.equal(UpdateExamSchema.safeParse({title:'Historical title'}).success,true);
+  assert.equal(UpdateExamSchema.safeParse({exam_date:future}).success,true);
+  const before=JSON.stringify(store.reloadState());
+  const simulated=await SimulationService.simulate(db,'student-a',{subject_id:'subject',additional_minutes:60,completed_topic_ids:[]});
+  assert.equal(simulated.delta,0,'Revision already saturated');
+  assert.equal(JSON.stringify(store.reloadState()),before,'Simulation must not mutate');
   console.log('Real-data formulas and storage: passed');
 } finally { process.chdir(original); fs.rmSync(temp, { recursive:true, force:true }); }
 

@@ -664,6 +664,7 @@ export const api = {
   // 9. Adaptive Planner API
   // --------------------------------------------------------------------------
   planner: {
+    simulate(payload:{subject_id:string;additional_minutes:number;completed_topic_ids:string[];available_hours_per_day:number}) { return request<{baseline:number;projected:number;delta:number;required_hours:number|null;available_hours:number|null;feasible:boolean;reason:string;assumptions:string[];baseline_breakdown:Record<string,number>;projected_breakdown:Record<string,number>}>('/planner/simulate',{method:'POST',body:JSON.stringify(payload)}); },
     getContext(subjectId?: string, signal?: AbortSignal, strict = false) {
       const params = new URLSearchParams();
       if (subjectId) params.set('subject_id', subjectId);

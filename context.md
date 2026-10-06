@@ -147,3 +147,5 @@ Actual local PDF bytes now persist, with scoped path checks and authenticated co
 
 ### Phase 8
 Tasks and Exams now have shared functional edit/create forms, error/pending states, subject/search filters, task priority/type sorting and Today/Upcoming/Overdue/Completed views; exam history and preparation checklist with scoped study links. Existing PATCH/ETag contracts reused.
+
+### Phase 9: simulator POST computes baseline/projected readiness from the same engine, actual session totals and owned topic data; unchanged quiz/assignment drivers, saturated revision, feasibility and explicit assumptions. No writes occur.

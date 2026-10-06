@@ -1,4 +1,5 @@
 'use client';
+import { SimulatorView } from './SimulatorView';
 import { Productivity } from './Productivity';
 import { StudyActivity } from './StudyActivity';
 import { examCountdown } from '@/lib/dates';
@@ -1558,64 +1559,8 @@ function Analytics() {
 // ============================================================================
 // 9. SIMULATOR (/simulator)
 // ============================================================================
-function Simulator() {
-  const { subjects, exams, readinessMap } = useAcademic();
-  const [hours, setHours] = useState(2);
+function Simulator() { return <SimulatorView />; }
 
-  return (
-    <>
-      <PageHeader
-        eyebrow="Try a different plan"
-        title="What-if simulator"
-        description="Explore how today's study choices could affect your plan before you commit."
-      />
-
-      {exams.length === 0 ? (
-        <Card className="py-12 text-center">
-          <Wand2 className="mx-auto text-primary" size={32} />
-          <h2 className="mt-4 text-xl font-bold">Simulator inactive</h2>
-          <p className="mt-2 text-sm text-muted">
-            Add an exam and an active study plan before running a scenario.
-          </p>
-        </Card>
-      ) : (
-        <div className="grid gap-5 lg:grid-cols-[1fr_.9fr]">
-          <Card>
-            <h2 className="font-bold">I have time today</h2>
-            <div className="mt-5 flex items-center gap-4">
-              <input
-                type="range"
-                min="1"
-                max="6"
-                value={hours}
-                onChange={e => setHours(+e.target.value)}
-                className="w-full accent-primary"
-              />
-              <span className="rounded-xl bg-highlight/45 px-3 py-2 font-black text-primary">{hours}h</span>
-            </div>
-            <p className="mt-4 text-xs text-muted">
-              Allocating focused time directly improves your revision activity driver (20% of readiness).
-            </p>
-          </Card>
-
-          <Card className="bg-gradient-to-br from-deep to-primary text-white">
-            <p className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-white/70">
-              <Wand2 size={15} /> Predicted impact
-            </p>
-            <h2 className="mt-3 text-2xl font-black">Scenario outcome</h2>
-            <p className="mt-2 text-sm text-white/80 leading-relaxed">
-              Completing a {hours}-hour focus session today will contribute directly to your 120-minute benchmark, raising your readiness driver.
-            </p>
-          </Card>
-        </div>
-      )}
-    </>
-  );
-}
-
-// ============================================================================
-// 10. LEARNING PROFILE (/profile)
-// ============================================================================
 function Profile() {
   const { profile, subjects, readinessMap } = useAcademic();
 

@@ -1,3 +1,5 @@
+import { SimulationService, SimulationSchema } from '../services/simulation.service.js';
+import { parseJsonBody } from './auth.routes.js';
 import http from 'http';
 import { requireAuth } from '../middleware/auth.middleware.js';
 import { PlannerContextService } from '../services/planner-context.service.js';
@@ -10,6 +12,16 @@ export async function handlePlannerRoutes(req: http.IncomingMessage, res: http.S
   const pathname = url.pathname;
   const method = req.method?.toUpperCase();
 
+  if(pathname==='/api/planner/simulate') {
+    await requireAuth(async(req,res,ctx)=>{
+      try {
+        if(method!=='POST') return sendError(res,'MethodNotAllowed','Use POST',405);
+        const parsed=SimulationSchema.safeParse(await parseJsonBody(req));
+        if(!parsed.success) throw AppError.validation('Invalid simulation',parsed.error.issues.map(i=>({field:i.path.join('.'),message:i.message})));
+        return sendSuccess(res,await SimulationService.simulate(ctx.db,ctx.user.id,parsed.data));
+      } catch(err) {return sendStandardError(res,err);}
+    })(req,res);return true;
+  }
   // Matches /api/planner/context or /api/planner/context/:subjectId
   const prefix = '/api/planner/context';
   let matches = false;

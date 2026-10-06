@@ -1585,3 +1585,5 @@ GET /api/materials/:id/content requires Bearer auth and owned metadata. Returns 
 ### Phase 6: GET /api/activity returns xp,level,progress_percent,next_level_xp,events,sessions. GET/POST /api/study-sessions lists/logs owned sessions; POST requires id UUID, subject_id, session_type, started_at, ended_at, optional topic_id/notes/timezone. Derived whole-minute duration, no future/overlapping sessions. Repeated id returns same record. XP formula documented in PLAN.md; ledger read-only to clients.
 
 ### Phase 7: POST exams and PATCH with exam_date require a future instant. Updating other fields on a historical record remains supported. Upcoming planner exams exclude passed instants.
+
+### Phase 9: POST /api/planner/simulate accepts subject_id, additional_minutes (0–1440), completed_topic_ids, optional available_hours_per_day (0–24). Returns baseline/projected/delta, both driver breakdowns, required_hours/available_hours (nullable when unknown), feasible/reason/assumptions. No academic mutation.

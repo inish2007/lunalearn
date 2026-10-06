@@ -1600,3 +1600,8 @@ GET /api/materials/:id/content requires Bearer auth and owned metadata. Returns 
 - `INSUFFICIENT_DATA.userMessage` preserves the actionable service explanation. Handler failures are not converted into authentication failures.
 - Simulation `required_hours` is null when any remaining-time estimate is unknown. Additional study minutes consume today's hypothetical availability; quiz/assignment scores remain unchanged. Capacity covers eight local calendar days.
 - Live Supabase migrations/storage/RLS have not been applied or verified in this local-only environment. Apply all five additive 20261006 migrations in order before live use.
+
+### Tasks/Exams retry and concurrency hardening (2026-10-07)
+`POST /api/tasks` and `POST /api/exams` additionally accept optional UUID `id`.
+Reuse it with the same payload for a durable retry: initial create returns 201, replay 200 with the same record; conflicting payload returns 409. Omitting it retains server-generated IDs and does not guarantee creation idempotency. A record modified since creation also conflicts with replay; retrieve it before deciding how to proceed.
+Titles are trimmed before nonempty/length validation. Task PATCH validates ownership of a replacement subject. Task/exam PATCH applies If-Match atomically to the write and returns 409 when the record changed; missing owned records return 404. UI conflict recovery explicitly reloads and discards unsaved edits. Subject deletion retains tasks and sessions with null subject references, matching existing SQL foreign keys.

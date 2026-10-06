@@ -666,6 +666,12 @@ export class LocalDevStore {
           ...row
         }));
 
+        if (['tasks', 'exams'].includes(tableName) && arr.some(item => (self.state[tableName] as any[]).some(row => row.id === item.id))) {
+          const result = { data: null, error: { code: '23505', message: 'Duplicate record ID' } };
+          const duplicate: any = { select: () => duplicate, single: () => Promise.resolve(result), then: (r: any, j: any) => Promise.resolve(result).then(r, j) };
+          return duplicate;
+        }
+
         // Strict RLS ownership check on insert
         if (scopedUserId) {
           for (const item of arr) {
@@ -733,45 +739,34 @@ export class LocalDevStore {
         };
       },
 
-      // Update Method
+      // Evaluate every predicate together when awaited, like a PostgREST update.
       update: (patch: Record<string, any>) => {
-        return {
-          eq: (col: string, val: any) => {
-            const tableArr = self.state[tableName] as any[];
-            const updated: any[] = [];
-            for (let i = 0; i < tableArr.length; i++) {
-              if (tableArr[i][col] === val && (!scopedUserId || self.rowBelongsToUser(tableName, tableArr[i], scopedUserId))) {
-                tableArr[i] = { ...tableArr[i], ...patch, updated_at: new Date().toISOString() };
-                updated.push(tableArr[i]);
-              }
+        const filters: Array<(row: any) => boolean> = [];
+        let result: any;
+        const execute = () => {
+          if (result) return result;
+          const rows = self.state[tableName] as any[];
+          const updated: any[] = [];
+          for (let i = 0; i < rows.length; i++) {
+            if (filters.every(f => f(rows[i])) && (!scopedUserId || self.rowBelongsToUser(tableName, rows[i], scopedUserId))) {
+              const nextVersion = new Date(Math.max(Date.now(), Date.parse(rows[i].updated_at || '') + 1 || 0)).toISOString();
+              rows[i] = { ...rows[i], ...patch, updated_at: nextVersion };
+              updated.push(rows[i]);
             }
-            self.saveState();
-            return {
-              select: () => ({
-                single: () => Promise.resolve({ data: updated[0] || null, error: null }),
-                then: (res: any) => Promise.resolve({ data: updated, error: null }).then(res)
-              }),
-              then: (res: any) => Promise.resolve({ data: updated, error: null }).then(res)
-            };
-          },
-          in: (col: string, vals: any[]) => {
-            const tableArr = self.state[tableName] as any[];
-            const updated: any[] = [];
-            for (let i = 0; i < tableArr.length; i++) {
-              if (vals.includes(tableArr[i][col]) && (!scopedUserId || self.rowBelongsToUser(tableName, tableArr[i], scopedUserId))) {
-                tableArr[i] = { ...tableArr[i], ...patch, updated_at: new Date().toISOString() };
-                updated.push(tableArr[i]);
-              }
-            }
-            self.saveState();
-            return {
-              select: () => ({
-                then: (res: any) => Promise.resolve({ data: updated, error: null }).then(res)
-              }),
-              then: (res: any) => Promise.resolve({ data: updated, error: null }).then(res)
-            };
           }
+          if (updated.length) self.saveState();
+          result = { data: updated, error: null };
+          return result;
         };
+        const builder: any = {
+          eq: (col: string, value: any) => { filters.push(row => row[col] === value); return builder; },
+          in: (col: string, values: any[]) => { filters.push(row => values.includes(row[col])); return builder; },
+          select: () => builder,
+          single: () => { const r = execute(); return Promise.resolve({ ...r, data: r.data[0] || null }); },
+          maybeSingle: () => builder.single(),
+          then: (resolve: any, reject: any) => Promise.resolve().then(execute).then(resolve, reject)
+        };
+        return builder;
       },
 
       // Delete Method
@@ -791,7 +786,12 @@ export class LocalDevStore {
                 const unitIds = (self.state.units || []).filter(u => subIds.includes(u.subject_id)).map(u => u.id);
                 self.state.topics = (self.state.topics || []).filter(t => !unitIds.includes(t.unit_id));
                 self.state.units = (self.state.units || []).filter(u => !subIds.includes(u.subject_id));
-                self.state.tasks = (self.state.tasks || []).filter(t => !subIds.includes(t.subject_id));
+                self.state.tasks = (self.state.tasks || []).map(t => subIds.includes(t.subject_id) ? { ...t, subject_id: null } : t);
+                self.state.study_sessions = (self.state.study_sessions || []).map(t => subIds.includes(t.subject_id) ? { ...t, subject_id: null, topic_id: null } : t);
+                self.state.quiz_results = (self.state.quiz_results || []).filter(t => !subIds.includes(t.subject_id));
+                self.state.quiz_runs = (self.state.quiz_runs || []).filter(t => !subIds.includes(t.subject_id));
+                const materialIds = self.state.materials.filter(t => subIds.includes(t.subject_id)).map(t => t.id);
+                self.state.document_chunks = self.state.document_chunks.filter(t => !materialIds.includes(t.material_id));
                 self.state.exams = (self.state.exams || []).filter(e => !subIds.includes(e.subject_id));
                 self.state.materials = (self.state.materials || []).filter(m => !subIds.includes(m.subject_id));
               } else if (tableName === 'units' && col === 'id') {
@@ -816,7 +816,12 @@ export class LocalDevStore {
                 const unitIds = (self.state.units || []).filter(u => subIds.includes(u.subject_id)).map(u => u.id);
                 self.state.topics = (self.state.topics || []).filter(t => !unitIds.includes(t.unit_id));
                 self.state.units = (self.state.units || []).filter(u => !subIds.includes(u.subject_id));
-                self.state.tasks = (self.state.tasks || []).filter(t => !subIds.includes(t.subject_id));
+                self.state.tasks = (self.state.tasks || []).map(t => subIds.includes(t.subject_id) ? { ...t, subject_id: null } : t);
+                self.state.study_sessions = (self.state.study_sessions || []).map(t => subIds.includes(t.subject_id) ? { ...t, subject_id: null, topic_id: null } : t);
+                self.state.quiz_results = (self.state.quiz_results || []).filter(t => !subIds.includes(t.subject_id));
+                self.state.quiz_runs = (self.state.quiz_runs || []).filter(t => !subIds.includes(t.subject_id));
+                const materialIds = self.state.materials.filter(t => subIds.includes(t.subject_id)).map(t => t.id);
+                self.state.document_chunks = self.state.document_chunks.filter(t => !materialIds.includes(t.material_id));
                 self.state.exams = (self.state.exams || []).filter(e => !subIds.includes(e.subject_id));
                 self.state.materials = (self.state.materials || []).filter(m => !subIds.includes(m.subject_id));
               } else if (tableName === 'units' && col === 'id') {

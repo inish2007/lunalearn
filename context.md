@@ -173,3 +173,10 @@ Natural-language command design documented in docs/NATURAL-LANGUAGE-COMMANDS-PLA
   - Live Supabase migrations/storage/RLS unverified in this local checkout (all 5 additive 20261006 migrations must be executed for live Supabase deployment).
   - OCR (phase 3) and natural-language commands (phase 13) remain documentation-only as specified.
   - Live Gemini generation is subject to external quota/transient 503 limits when not using the fixture mock.
+
+## Tasks/Exams hardening — 2026-10-07 (cluster 1)
+- Reproduced and fixed whitespace-only task/exam titles, cross-owner task reparenting, repeated creates, local conditional-update support, and subject deletion incorrectly removing tasks/retaining linked sessions. Local deletion now matches existing SET NULL/CASCADE relationships for these subject links.
+- Task/exam writes compare If-Match inside the database update; local writes evaluate all filters together and advance timestamps monotonically. Optional creation UUIDs provide durable retry identity; mismatched replay returns 409, never overwrites. UI uses one UUID per form and synchronous pending guards.
+- Browser reproduced missing Escape/focus handling. Native modal now traps focus, restores it, disables pending fields, supports Escape, wraps long titles, and provides clear-filter and conflict-reload controls. Two-tab stale edit visibly returned conflict; reload restored the second tab's saved title. Script-like title rendered as literal text.
+- Verification: new disposable HTTP/schema/store suite 23 passed / 0 failed; backend and frontend TypeScript checks passed. Browser create, pending fields, Escape, two-tab conflict/recovery passed. Broad production regression and remaining date/mobile coverage pending next cluster.
+- Contract: optional UUID `id` on task/exam POST. Existing callers remain supported; callers requiring retry idempotency must reuse the same ID/payload. Same replay 200; initial create 201; differing replay 409. No schema migration required (existing primary key). Live Postgres race validation remains pending.

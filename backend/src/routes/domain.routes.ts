@@ -104,6 +104,37 @@ async function checkOptimisticConcurrency(
   return true;
 }
 
+/** The primary key is the durable create retry key; never overwrite on replay. */
+async function createProductivity(res: http.ServerResponse, db: any, name: string, payload: Record<string, unknown>) {
+  const { data, error } = await table(db, name).insert(payload).select('*').single();
+  if (error?.code === '23505' && payload.id) {
+    const { data: existing, error: readError } = await table(db, name).select('*').eq('id', payload.id).maybeSingle();
+    if (readError) return sendError(res, 'DatabaseError', 'Could not verify retry. Please retry.', 500);
+    if (!existing) return sendError(res, 'Conflict', 'Creation ID unavailable. Start a new record.', 409);
+    const same = Object.entries(payload).every(([key, value]) => key === 'due_date' || key === 'exam_date'
+      ? (value == null ? existing[key] == null : Date.parse(String(value)) === Date.parse(existing[key]))
+      : existing[key] === value);
+    if (!same) return sendError(res, 'Conflict', 'This creation ID already exists with different values. Reload before continuing.', 409);
+    return sendSuccess(res, existing, 200, 'Previously created record');
+  }
+  if (error) return sendError(res, 'DatabaseError', 'Could not create record. Please retry.', 500);
+  return sendSuccess(res, data, 201, 'Record created successfully');
+}
+
+/** Ownership-scoped, atomic compare-and-swap. The predicate belongs on the write. */
+async function updateProductivity(req: http.IncomingMessage, res: http.ServerResponse, db: any, name: string, id: string, payload: Record<string, unknown>) {
+  const { data: existing, error: readError } = await table(db, name).select('id').eq('id', id).maybeSingle();
+  if (readError) return sendError(res, 'DatabaseError', 'Could not read record. Please retry.', 500);
+  if (!existing) return sendError(res, 'NotFound', 'Record not found', 404);
+  let query = table(db, name).update(payload).eq('id', id);
+  const version = req.headers['if-match'];
+  if (version && version !== '*') query = query.eq('updated_at', String(version).replace(/^"|"$/g, ''));
+  const { data, error } = await query.select('*').maybeSingle();
+  if (error) return sendError(res, 'DatabaseError', 'Could not save record. Please retry.', 500);
+  if (!data) return sendError(res, 'Conflict', 'This record changed in another tab. Reload it before saving again.', 409);
+  return sendSuccess(res, data, 200, 'Record updated successfully');
+}
+
 // ==============================================================================
 // Domain Routes Dispatcher
 // ==============================================================================
@@ -521,8 +552,8 @@ export async function handleDomainRoutes(req: http.IncomingMessage, res: http.Se
           }
         }
 
-        const { data, error } = await table(ctx.db, 'tasks')
-          .insert({
+        return createProductivity(res, ctx.db, 'tasks', {
+            ...(parsed.data.id ? { id: parsed.data.id } : {}),
             profile_id: ctx.user.id,
             subject_id: parsed.data.subject_id ?? null,
             title: parsed.data.title,
@@ -531,12 +562,7 @@ export async function handleDomainRoutes(req: http.IncomingMessage, res: http.Se
             due_date: parsed.data.due_date ?? null,
             estimated_minutes: parsed.data.estimated_minutes ?? null,
             is_completed: parsed.data.is_completed
-          })
-          .select('*')
-          .single();
-
-        if (error) return sendError(res, 'DatabaseError', error.message, 500);
-        return sendSuccess(res, data, 201, 'Task created successfully');
+          });
       }
 
       // GET /api/tasks/:id
@@ -563,8 +589,11 @@ export async function handleDomainRoutes(req: http.IncomingMessage, res: http.Se
           return sendError(res, 'ValidationError', 'Invalid task update payload', 400, parsed.error.issues.map(i => ({ field: i.path.join('.'), message: i.message })));
         }
 
-        const allowed = await checkOptimisticConcurrency(req, res, ctx.db, 'tasks', id);
-        if (!allowed) return;
+        if (parsed.data.subject_id) {
+          const { data: parent, error } = await table(ctx.db, 'subjects').select('id').eq('id', parsed.data.subject_id).maybeSingle();
+          if (error) return sendError(res, 'DatabaseError', 'Could not validate subject.', 500);
+          if (!parent) return sendError(res, 'Forbidden', 'Subject does not exist or does not belong to you', 403);
+        }
 
         const updatePayload: Record<string, unknown> = { ...parsed.data };
         if (parsed.data.is_completed === true) {
@@ -573,14 +602,7 @@ export async function handleDomainRoutes(req: http.IncomingMessage, res: http.Se
           updatePayload.completed_at = null;
         }
 
-        const { data, error } = await table(ctx.db, 'tasks')
-          .update(updatePayload)
-          .eq('id', id)
-          .select('*')
-          .single();
-
-        if (error || !data) return sendError(res, 'NotFound', 'Task not found or update unauthorized', 404);
-        return sendSuccess(res, data, 200, 'Task updated successfully');
+        return updateProductivity(req, res, ctx.db, 'tasks', id, updatePayload);
       }
 
       // DELETE /api/tasks/:id
@@ -651,19 +673,14 @@ export async function handleDomainRoutes(req: http.IncomingMessage, res: http.Se
           return sendError(res, 'Forbidden', 'Subject does not exist or does not belong to you', 403);
         }
 
-        const { data, error } = await table(ctx.db, 'exams')
-          .insert({
+        return createProductivity(res, ctx.db, 'exams', {
+            ...(parsed.data.id ? { id: parsed.data.id } : {}),
             profile_id: ctx.user.id,
             subject_id: parsed.data.subject_id,
             title: parsed.data.title,
             exam_date: parsed.data.exam_date,
             target_score: parsed.data.target_score
-          })
-          .select('*')
-          .single();
-
-        if (error) return sendError(res, 'DatabaseError', error.message, 500);
-        return sendSuccess(res, data, 201, 'Exam created successfully');
+          });
       }
 
       // GET /api/exams/:id
@@ -690,17 +707,7 @@ export async function handleDomainRoutes(req: http.IncomingMessage, res: http.Se
           return sendError(res, 'ValidationError', 'Invalid exam update payload', 400, parsed.error.issues.map(i => ({ field: i.path.join('.'), message: i.message })));
         }
 
-        const allowed = await checkOptimisticConcurrency(req, res, ctx.db, 'exams', id);
-        if (!allowed) return;
-
-        const { data, error } = await table(ctx.db, 'exams')
-          .update(parsed.data)
-          .eq('id', id)
-          .select('*')
-          .single();
-
-        if (error || !data) return sendError(res, 'NotFound', 'Exam not found or update unauthorized', 404);
-        return sendSuccess(res, data, 200, 'Exam updated successfully');
+        return updateProductivity(req, res, ctx.db, 'exams', id, parsed.data);
       }
 
       // DELETE /api/exams/:id

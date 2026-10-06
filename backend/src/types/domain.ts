@@ -104,8 +104,9 @@ export const PriorityLevelEnum = z.preprocess(
 );
 
 export const CreateTaskSchema = z.object({
+  id: z.string().uuid().optional(),
   estimated_minutes: z.number().int().positive().max(10080).nullable().optional(),
-  title: z.string().min(1, { message: 'Task title is required' }).max(250),
+  title: z.string().trim().min(1, { message: 'Task title is required' }).max(250),
   subject_id: z.string().uuid({ message: 'subject_id must be a valid UUID' }).optional().nullable(),
   type: TaskTypeEnum.default('Task'),
   priority: PriorityLevelEnum.default('Medium'),
@@ -117,7 +118,7 @@ export type CreateTaskInput = z.infer<typeof CreateTaskSchema>;
 
 export const UpdateTaskSchema = z.object({
   estimated_minutes: z.number().int().positive().max(10080).nullable().optional(),
-  title: z.string().min(1).max(250).optional(),
+  title: z.string().trim().min(1).max(250).optional(),
   subject_id: z.string().uuid().optional().nullable(),
   type: TaskTypeEnum.optional(),
   priority: PriorityLevelEnum.optional(),
@@ -132,8 +133,9 @@ export type UpdateTaskInput = z.infer<typeof UpdateTaskSchema>;
 // ==============================================================================
 
 export const CreateExamSchema = z.object({
+  id: z.string().uuid().optional(),
   subject_id: z.string().uuid({ message: 'Valid subject_id UUID is required' }),
-  title: z.string().min(1, { message: 'Exam title is required' }).max(200),
+  title: z.string().trim().min(1, { message: 'Exam title is required' }).max(200),
   exam_date: z.string().datetime({ message: 'exam_date must be an ISO 8601 timestamp' }).refine(value => Date.parse(value) > Date.now(), 'Exam date must be in the future.'),
   target_score: z.number().min(0).max(100).default(80)
 });
@@ -141,7 +143,7 @@ export const CreateExamSchema = z.object({
 export type CreateExamInput = z.infer<typeof CreateExamSchema>;
 
 export const UpdateExamSchema = z.object({
-  title: z.string().min(1).max(200).optional(),
+  title: z.string().trim().min(1).max(200).optional(),
   exam_date: z.string().datetime().refine(value => Date.parse(value) > Date.now(), 'Exam date must be in the future.').optional(),
   target_score: z.number().min(0).max(100).optional()
 }).refine(data => Object.keys(data).length > 0, { message: 'At least one field must be provided to update' });

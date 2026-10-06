@@ -495,7 +495,7 @@ export const api = {
     get(id: string, signal?: AbortSignal) {
       return request<Task>(`/tasks/${encodeURIComponent(id)}`, { signal });
     },
-    create(payload: { title: string; subject_id?: string | null; type?: string; priority?: string; estimated_minutes?: number | null; due_date?: string | null; is_completed?: boolean }) {
+    create(payload: { id?: string; title: string; subject_id?: string | null; type?: string; priority?: string; estimated_minutes?: number | null; due_date?: string | null; is_completed?: boolean }) {
       return request<Task>('/tasks', {
         method: 'POST',
         body: JSON.stringify(payload)
@@ -526,7 +526,7 @@ export const api = {
     get(id: string, signal?: AbortSignal) {
       return request<Exam>(`/exams/${encodeURIComponent(id)}`, { signal });
     },
-    create(payload: { subject_id: string; title: string; exam_date: string; target_score?: number }) {
+    create(payload: { id?: string; subject_id: string; title: string; exam_date: string; target_score?: number }) {
       return request<Exam>('/exams', {
         method: 'POST',
         body: JSON.stringify(payload)

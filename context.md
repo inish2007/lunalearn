@@ -153,3 +153,6 @@ Tasks and Exams now have shared functional edit/create forms, error/pending stat
 ### Phase 10: Settings persists profile, semester, daily availability (including zero), local focus start/end and timezone via profile PATCH. Browser-local theme validates saved values and follows OS appearance. Connection status derives from actual academic load. New profile preferences migration required; default focus 17:00–19:00 UTC is explicitly labeled until saved.
 
 ### Phase 11: My Learning owns syllabus and editable remaining-time topic estimates; Planner consumes deterministic dated blocks with durations/reasons, shared multi-subject capacity, missing-estimate and conflict states, links to study/task actions and real session logging. Task estimated_minutes added via migration. Eight-day local focus windows use saved timezone/availability; today logged minutes reduce budget and linked topic work. Simulator now uses the same scheduler.
+
+### Phase 12
+Dashboard redesigned around nearest exam/readiness basis, logged study, next scheduled block, actionable tasks, and a functional month calendar. Calendar combines persisted exams/tasks/sessions and clearly labeled generated blocks, supports month/Today/date selection and agenda completion links. Responsive layout preserves mobile priority order.

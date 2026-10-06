@@ -1,0 +1,2 @@
+alter table public.profiles add column if not exists focus_start text not null default '17:00', add column if not exists focus_end text not null default '19:00', add column if not exists timezone text not null default 'UTC';
+alter table public.profiles add constraint focus_window_valid check(focus_start ~ '^([01][0-9]|2[0-3]):[0-5][0-9]$' and focus_end ~ '^([01][0-9]|2[0-3]):[0-5][0-9]$' and focus_start<focus_end);

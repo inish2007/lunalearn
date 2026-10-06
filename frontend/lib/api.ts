@@ -379,6 +379,7 @@ export const api = {
       }
     },
 
+    async updateSettings(payload: {full_name:string;course:string;semester:number;available_hours_per_day:number|null;focus_start:string;focus_end:string;timezone:string}) { return request<{profile:Profile}>('/auth/me',{method:'PATCH',body:JSON.stringify(payload)}); },
     async me(signal?: AbortSignal) {
       const data = await request<{ user: any; profile: Profile }>('/auth/me', { signal });
       if (data?.profile) {

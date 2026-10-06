@@ -50,7 +50,8 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     setMounted(true);
-    const stored = (localStorage.getItem(STORAGE_KEY) as Theme) || 'dark'; // Default to dreamy dark
+    const raw=localStorage.getItem(STORAGE_KEY);
+    const stored: Theme = raw==='light'||raw==='dark'||raw==='system'?raw:'dark'; // Default to dreamy dark
     setThemeState(stored);
     applyTheme(stored);
 
@@ -58,7 +59,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
     const handleSystemChange = () => {
       const currentStored = localStorage.getItem(STORAGE_KEY) as Theme;
-      if (!currentStored || currentStored === 'system') {
+      if (currentStored === 'system') {
         applyTheme('system');
       }
     };

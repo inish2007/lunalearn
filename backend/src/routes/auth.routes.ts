@@ -160,7 +160,7 @@ export async function handleAuthRoutes(req: http.IncomingMessage, res: http.Serv
 
         const { data, error } = await (ctx.db as any)
           .from('profiles')
-          .update(parsed.data)
+          .update({ ...parsed.data, ...(parsed.data.focus_start ? { preferred_focus_time: `${parsed.data.focus_start}–${parsed.data.focus_end}` } : {}) })
           .eq('id', ctx.user.id)
           .select('*')
           .single();

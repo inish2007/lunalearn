@@ -1587,3 +1587,5 @@ GET /api/materials/:id/content requires Bearer auth and owned metadata. Returns 
 ### Phase 7: POST exams and PATCH with exam_date require a future instant. Updating other fields on a historical record remains supported. Upcoming planner exams exclude passed instants.
 
 ### Phase 9: POST /api/planner/simulate accepts subject_id, additional_minutes (0–1440), completed_topic_ids, optional available_hours_per_day (0–24). Returns baseline/projected/delta, both driver breakdowns, required_hours/available_hours (nullable when unknown), feasible/reason/assumptions. No academic mutation.
+
+### Phase 10: PATCH /api/auth/me accepts optional full_name/course/semester, available_hours_per_day (0–24 or null), focus_start/focus_end HH:mm (both, same day, end>start), and IANA timezone. preferred_focus_time is derived server-side. Planner settings include focus_start,focus_end,timezone and availability-based daily/weekly targets.

@@ -149,3 +149,5 @@ Actual local PDF bytes now persist, with scoped path checks and authenticated co
 Tasks and Exams now have shared functional edit/create forms, error/pending states, subject/search filters, task priority/type sorting and Today/Upcoming/Overdue/Completed views; exam history and preparation checklist with scoped study links. Existing PATCH/ETag contracts reused.
 
 ### Phase 9: simulator POST computes baseline/projected readiness from the same engine, actual session totals and owned topic data; unchanged quiz/assignment drivers, saturated revision, feasibility and explicit assumptions. No writes occur.
+
+### Phase 10: Settings persists profile, semester, daily availability (including zero), local focus start/end and timezone via profile PATCH. Browser-local theme validates saved values and follows OS appearance. Connection status derives from actual academic load. New profile preferences migration required; default focus 17:00–19:00 UTC is explicitly labeled until saved.

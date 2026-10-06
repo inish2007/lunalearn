@@ -14,7 +14,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       <head>
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){try{var t=localStorage.getItem('lunalearn_theme');var d=t==='dark'||(!t&&window.matchMedia('(prefers-color-scheme: dark)').matches)||t===null;if(d)document.documentElement.classList.add('dark');}catch(e){}})()`
+            __html: `(function(){try{var t=localStorage.getItem('lunalearn_theme');var d=t==='dark'||t===null||(t==='system'&&window.matchMedia('(prefers-color-scheme: dark)').matches);if(d)document.documentElement.classList.add('dark');}catch(e){}})()`
           }}
         />
       </head>

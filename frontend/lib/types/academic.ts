@@ -12,6 +12,9 @@ export type RiskType = 'HIGH_EXAM_RISK' | 'DEADLINE_RISK' | 'PERFORMANCE_RISK' |
 export type RiskSeverity = 'high' | 'medium' | 'low';
 
 export interface Profile {
+  focus_start?: string;
+  focus_end?: string;
+  timezone?: string;
   id: string;
   email: string | null;
   full_name: string | null;
@@ -21,6 +24,7 @@ export interface Profile {
   xp: number;
   level: number;
   preferred_focus_time: string | null;
+  available_hours_per_day?: number | null;
   created_at?: string;
   updated_at?: string;
 }
@@ -139,6 +143,9 @@ export interface SubjectReadiness {
 }
 
 export interface StudyTimeSettings {
+  focus_start?: string;
+  focus_end?: string;
+  timezone?: string;
   preferred_focus_time: string;
   daily_study_target_minutes: number;
   weekly_study_target_minutes: number;

@@ -42,9 +42,10 @@ export class PlannerContextService {
     if (profileError) throw AppError.internal('Could not load profile', profileError);
 
     const studySettings: StudyTimeSettings = {
-      preferred_focus_time: profile?.preferred_focus_time || 'Evening (5:00 PM - 8:00 PM)',
-      daily_study_target_minutes: 120, // 2-hour daily benchmark
-      weekly_study_target_minutes: 840,
+      preferred_focus_time: profile?.preferred_focus_time || '17:00–19:00 (default)',
+      focus_start: profile?.focus_start || '17:00', focus_end: profile?.focus_end || '19:00', timezone: profile?.timezone || 'UTC',
+      daily_study_target_minutes: Math.round((profile?.available_hours_per_day ?? 2)*60),
+      weekly_study_target_minutes: Math.round((profile?.available_hours_per_day ?? 2)*420),
       available_hours_per_day: profile?.available_hours_per_day == null
         ? 2.0
         : Number(profile.available_hours_per_day)

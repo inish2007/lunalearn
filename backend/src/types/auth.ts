@@ -20,8 +20,13 @@ export const SignInSchema = z.object({
 export type SignInInput = z.infer<typeof SignInSchema>;
 
 export const UpdateProfileSettingsSchema = z.object({
-  available_hours_per_day: z.number().min(0).max(24).nullable()
-}).strict();
+  available_hours_per_day: z.number().min(0).max(24).nullable().optional(),
+  full_name: z.string().trim().min(2).max(120).optional(),
+  course: z.string().trim().min(1).max(120).optional(), semester: z.number().int().min(1).max(12).optional(),
+  focus_start: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).optional(),
+  focus_end: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).optional(),
+  timezone: z.string().refine(v=>{try{new Intl.DateTimeFormat('en',{timeZone:v});return true;}catch{return false;}},'Invalid timezone').optional()
+}).strict().refine(v=>Object.keys(v).length>0,'Provide a setting').refine(v=>(v.focus_start===undefined && v.focus_end===undefined) || (!!v.focus_start && !!v.focus_end && v.focus_start<v.focus_end),'Provide a same-day focus window with end after start.');
 
 export type UpdateProfileSettingsInput = z.infer<typeof UpdateProfileSettingsSchema>;
 

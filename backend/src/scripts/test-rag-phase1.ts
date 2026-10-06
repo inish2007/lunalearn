@@ -108,6 +108,8 @@ function createMockDb(
           data: filtered[0] || null,
           error: filtered[0] ? null : { message: 'Row not found' }
         }),
+        update: (values: any) => { for (const row of filtered) Object.assign(row,values); return query; },
+        then: (resolve: any) => Promise.resolve({data: filtered,error:null}).then(resolve),
         insert: (rows: any | any[]) => {
           if (tableName === 'document_chunks' && documentChunkInsertError) {
             return { data: null, error: documentChunkInsertError };

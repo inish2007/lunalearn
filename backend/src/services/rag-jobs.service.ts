@@ -21,7 +21,7 @@ export interface RagJob {
   subjectId: string;
   fileName: string;
   status: RagJobState;
-  progressPercent: number;
+  progressPercent: number | null;
   materialId?: string;
   chunksCreated?: number;
   totalPages?: number;
@@ -46,7 +46,7 @@ export class RagJobsService {
       subjectId: params.subjectId,
       fileName: params.fileName,
       status: 'UPLOADED',
-      progressPercent: 10,
+      progressPercent: null,
       createdAt: now,
       updatedAt: now
     };
@@ -69,26 +69,8 @@ export class RagJobsService {
     return this.jobs.get(jobId) || null;
   }
 
-  public static getProgressPercentage(status: RagJobState): number {
-    switch (status) {
-      case 'UPLOADED':
-        return 10;
-      case 'VALIDATING':
-        return 25;
-      case 'EXTRACTING':
-        return 45;
-      case 'CHUNKING':
-        return 65;
-      case 'EMBEDDING':
-        return 85;
-      case 'INDEXING':
-        return 95;
-      case 'READY':
-        return 100;
-      case 'FAILED':
-        return 0;
-      default:
-        return 0;
-    }
+  /** Intermediate processing stages have no measured overall percentage. */
+  public static getProgressPercentage(status: RagJobState): number | null {
+    return status === 'READY' ? 100 : status === 'FAILED' ? 0 : null;
   }
 }

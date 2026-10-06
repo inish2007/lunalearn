@@ -9,6 +9,7 @@ export function zonedInstant(day:string,time:string,timezone:string):number {
 }
 export class ScheduleService {
  static build(context:PlannerContextResponse,sessions:StudySession[]=[],now=new Date()):StudyPlan {
+  sessions=sessions.filter(s=>Number.isFinite(Date.parse(s.started_at)) && Number.isFinite(s.duration_minutes) && s.duration_minutes>=0 && Date.parse(s.started_at)<=now.getTime());
   const settings=context.student.study_time_settings,tz=settings.timezone || 'UTC',today=localDate(now,tz);
   const windows:Array<{start:number;end:number}>=[];
   for(let d=0;d<8;d++){

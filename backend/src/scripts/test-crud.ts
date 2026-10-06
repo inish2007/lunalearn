@@ -122,7 +122,7 @@ async function runCrudTests() {
   const validExam = CreateExamSchema.safeParse({
     subject_id: fakeUuid,
     title: 'DBMS Mid-semester',
-    exam_date: '2026-09-30T09:30:00.000Z',
+    exam_date: new Date(Date.now()+86400000).toISOString(),
     target_score: 85
   });
   assert(validExam.success, 'Valid exam payload passes validation');
@@ -130,7 +130,7 @@ async function runCrudTests() {
   const outOfRangeScoreExam = CreateExamSchema.safeParse({
     subject_id: fakeUuid,
     title: 'DBMS Mid-sem',
-    exam_date: '2026-09-30T09:30:00.000Z',
+    exam_date: new Date(Date.now()+86400000).toISOString(),
     target_score: 150 // max 100
   });
   assert(!outOfRangeScoreExam.success, 'Exam target score > 100 rejected');

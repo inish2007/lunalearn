@@ -67,36 +67,75 @@ Owners: StudyAssistantService.askAssistant, assistant.routes.ts and domain/mater
 Document future allowlisted typed commands, Gemini parsing, authenticated entity resolution, preview, existing-service execution. “show my DBMS notes” filters/navigates; “save this PDF to my Maths folder” requires selected file and resolves subject/unit. Clarify ambiguity, preview writes, idempotency/ownership, never execute document instructions. Document material-move support and tests. No command implementation or folder migration.
 
 ## 14. Full real-data/control sweep
-Audit inventory (all initially pending; resolved by corresponding phases and final verification):
-| Owner/finding | Fix/phase |
-|---|---|
-| LocalDevStore.createClient fake file storage | real bytes, 2 |
-| StorageService.writeLocalFallback swallowed errors | propagate, 2 |
-| Materials.submitUpload fake metadata/1,024,000 bytes | require PDF, remove unsupported choices, 14 |
-| AcademicProvider.importSyllabus invented file/units/topics/mastery | real upload/manual entry, 14 |
-| Login.handleProcessSyllabus staged delays/false AI extraction | actual status, 14 |
-| quiz/assistant fallback mislabel | 3–4 |
-| positional quiz citations/client keys/failed writes | 4 |
-| refreshAll suppressed failures/engine query failures | 5 |
-| XP 15% minimum | 6 |
-| past exams/negative counts | 7 |
-| fake planner slots/missing-data suppression | 11 |
-| zero availability replaced | 10 |
-| narrative-only simulator | 9 |
-| settings inert/static online | 10 |
-| demo identity/course/focus fallbacks | neutral missing data, 14 |
-| assistant discarded sources/null material scope | 3 |
-| Indexed materials includes unprocessed files | actual status, 14 |
-| CountUpAll mutates all numeric text | remove, 5 |
-| unused Ui.Mission/statMeta fixed DBMS/time/streak/totals/button | remove, 14 |
-| RAG fixed inconsistent progress percentages | named stages/measured counts, 14 |
-| Analytics threshold/sample unexplained | explanation and unavailable states, 14 |
-| frontend/lib/mocks/academic.ts empty exports | retain only if used; no fake activity |
-| demo login/seed | preserve explicitly labeled |
+Audit inventory: completed. Verification distinguishes source/control review, automated fixtures, browser actions, and unavailable live Supabase.
+| File/function or owner; finding | Correction / phase | Verification status |
+|---|---|---|
+| LocalDevStore.createClient fake file storage | real bytes, 2 | Done — source/contract review and relevant regression |
+| StorageService.writeLocalFallback swallowed errors | propagate, 2 | Done — source/contract review and relevant regression |
+| Materials.submitUpload fake metadata/1,024,000 bytes | require PDF, remove unsupported choices, 14 | Done — source/contract review and relevant regression |
+| AcademicProvider.importSyllabus invented file/units/topics/mastery | real upload/manual entry, 14 | Done — source/contract review and relevant regression |
+| Login.handleProcessSyllabus staged delays/false AI extraction | actual status, 14 | Done — source/contract review and relevant regression |
+| quiz/assistant fallback mislabel | 3–4 | Done — source/contract review and relevant regression |
+| positional quiz citations/client keys/failed writes | 4 | Done — source/contract review and relevant regression |
+| refreshAll suppressed failures/engine query failures | 5 | Done — source/contract review and relevant regression |
+| XP 15% minimum | 6 | Done — source/contract review and relevant regression |
+| past exams/negative counts | 7 | Done — source/contract review and relevant regression |
+| fake planner slots/missing-data suppression | 11 | Done — source/contract review and relevant regression |
+| zero availability replaced | 10 | Done — source/contract review and relevant regression |
+| narrative-only simulator | 9 | Done — source/contract review and relevant regression |
+| settings inert/static online | 10 | Done — source/contract review and relevant regression |
+| demo identity/course/focus fallbacks | neutral missing data, 14 | Done — source/contract review and relevant regression |
+| assistant discarded sources/null material scope | 3 | Done — source/contract review and relevant regression |
+| Indexed materials includes unprocessed files | actual status, 14 | Done — source/contract review and relevant regression |
+| CountUpAll mutates all numeric text | remove, 5 | Done — source/contract review and relevant regression |
+| unused Ui.Mission/statMeta fixed DBMS/time/streak/totals/button | remove, 14 | Done — source/contract review and relevant regression |
+| RAG fixed inconsistent progress percentages | named stages/measured counts, 14 | Done — source/contract review and relevant regression |
+| Analytics threshold/sample unexplained | explanation and unavailable states, 14 | Done — source/contract review and relevant regression |
+| frontend/lib/mocks/academic.ts empty exports | retain only if used; no fake activity | Done — source/contract review and relevant regression |
+| demo login/seed | preserve explicitly labeled | Done — source/contract review and relevant regression |
 Finish route-by-route buttons/links/filters/forms/previews, wire or remove inert affordances. Constants for design/formulas/defaults and test fixtures are not fabricated student data.
 
 ## Interfaces and validation
 Update backend/frontend types, wrappers, local-store parity, additive migrations and CONTRACTS with readiness basis, PDF retrieval, quiz run/difficulty/submission, sessions/XP, simulation/schedule, settings. Tests: formula boundaries/empty/latest10/seven-day/rounding; file bytes/reload/ownership/missing/corrupt/cleanup; Markdown/citations/unsafe HTML; AI success/failure/open circuit/missing material/count/duplicates/difficulty/source tampering/durable submission; XP duplicate/overlap/cap; dates/history/timezones; edit/filter/persist/zero/estimates/capacity; simulation nonmutation/calendar dates. Backend typecheck/relevant tests each phase, frontend production build and final core-loop walkthrough. Deterministic provider mocks separately from live Gemini verification; unavailable live provider must be reported, never substitute fallback as proof.
 
 ## Execution log
-Plan saved before implementation. Live Supabase/Gemini verification remains pending.
+Plan saved before implementation. Phases 1–13 committed separately; phase 14 final verification recorded below. Live Supabase remains unverified. Live Gemini succeeded on a bounded retry (two source-grounded questions and 1,536-dimensional embeddings); earlier 503 responses remain recorded as failures.
+
+### Percentage audit: all academic bars use engine or topic counts; targets are student goals; average uses returned readiness sample; global number animation removed. Missing required datasets now block misleading zero/empty displays. XP bar replaced in phase 6.
+
+
+### Phase 14 additional findings and corrections
+| File / function | Finding and correction | Phase | Verification status |
+|---|---|---|---|
+| backend/src/lib/local-store.ts / createClient.searchRpc; semantic-search.service.ts / searchWithClientFallback | Constant 0.85 relevance and synthetic missing vectors removed; compare stored vectors, enforce scope, skip missing embeddings | 14 | Done; retrieval/provider fixtures |
+| backend/src/services/rag-material.service.ts / processAndIndexPdf | Metadata was created only after embeddings; now retain original as unprocessed before extraction, mark processed only after all chunk writes succeed | 14 | Done; failed-indexing original-read fixture |
+| backend/src/services/quiz.service.ts / generateQuiz; migration 20261006000005 | Removed unused canned bank; validate model-selected topic IDs; answer table is backend-only in Supabase, ownership-checked submission RPC retained | 14 | Done locally; migration/RLS live execution unverified |
+| backend/src/middleware/auth.middleware.ts / requireAuth | Handler/database failures incorrectly became 401; token verification alone maps to 401 | 14 | Done; auth regression |
+| backend/src/scripts/seed-demo.ts / main, seedDemoDataset | Local reset was only in-memory; now saves actual local demo. Replace non-UUID IDs; use ledger XP and consistent 15/20=75% quiz fixture | 14 | Done; disposable fixture server |
+| frontend/lib/context/AcademicContext.tsx / loadUnitsAndTopics | Syllabus failures silently ignored; visible dataset error now retained | 14 | Done; source review/typechecks |
+| frontend/components/Workspace.tsx / Learning | Completing a topic silently cleared its weak marker; preserve marker. Label checkboxes/delete controls; show delete errors | 14 | Done; control/source review |
+| Workspace / Quizzes, Assistant | Stale material/topic selection across subject switches; reset scope. Dynamic question-count copy and accessible Send control | 14 | Done; browser/source review |
+| backend/src/types/errors.ts / insufficientData | Generic message hid the required PDF upload action; preserve actionable service message | 14 | Done; browser finding corrected |
+| PlannerView / PlannerView; Dashboard / Dashboard | Old display-only focus label and inconsistent default timezone; show scheduler window and timezone | 14 | Done; browser finding corrected |
+| SimulatorView / SimulatorView; SimulationService / simulate | Unknown hours rendered as Unknownh; format explicitly, disclose eight-day capacity, charge hypothetical minutes against today's availability | 14 | Done; nonmutation/saturation fixtures and browser calculation |
+| AcademicContext / uploadMaterialPdf; Workspace / Materials | Expose actual asynchronous job stage with measured extracted page/prepared chunk counts, no invented intermediate percentage | 14 | Done; production build; job endpoint covered |
+
+### Route-by-route control audit (one browser pass, disposable data)
+All visible controls were checked against their handlers/links; meaningful safe actions below were exercised. Destructive delete handlers were inspected without deleting user data.
+| Route / owner | Result |
+|---|---|
+| Dashboard / Dashboard | Done: readiness disclosure, next-month navigation, event markers/agenda; task/subject/study links wired |
+| Materials / Workspace.Materials, PdfPreview | Done: upload dialog, required file/title/subject, cancel; name opens authenticated viewer, close/download/page cleanup implemented; final PDF check below |
+| Assistant / Workspace.Assistant | Done: subject/material selectors, suggested prompt fills composer, Send wired, source preview and Markdown handlers retained |
+| Quizzes / Workspace.Quizzes | Done: all real subject topics, count/material/difficulty selectors, Begin returns honest missing-material error; submit/reset/retry handlers reviewed |
+| Learning / Workspace.Learning, TopicEstimate | Done: subject/unit/topic forms, completion/weak toggles, estimates and deletes wired; add/cancel exercised |
+| Planner / PlannerView, StudyActivity | Done: missing-estimate state, study/task/settings links, session fields and history wired |
+| Tasks / Productivity | Done: edit estimate saved; Completed filter produced honest empty state; search/type/priority/sort/completion/reopen/delete handlers reviewed |
+| Exams / Productivity | Done: edit/cancel, target goal, readiness disclosure, history/filter and scoped preparation links |
+| Simulator / SimulatorView | Done: scenario calculated 49→54 with 30 additional minutes; unknown estimates surfaced |
+| Analytics / Workspace.Analytics | Done: real 49% mean, sample=1; 70% status threshold displayed |
+| Profile / Workspace.Profile, StudyActivity | Done: ledger-derived 112 XP, history/logging, real readiness; no arbitrary progress |
+| Settings / SettingsView, ThemeProvider | Done: zero availability saved and survived reload; theme scope and actual connection status visible |
+| Shared navigation / AppShell; Notifications | Done: route links, mobile toggle, sign-out, theme switch; notifications use actual risk records; no fabricated feed |
+
+No CountUpAll implementation or call remains. Ui.Mission/statMeta and pseudo-embedding/canned quiz helpers are removed. Empty academic mock exports contain no student activity; explicit seed fixtures remain distinguishable from user records.

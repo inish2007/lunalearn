@@ -189,36 +189,4 @@ export class EmbeddingService {
     return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
   }
 
-  /**
-   * Deterministic pseudo-embedding generator used for local fallback / unit tests.
-   * Produces reproducible vectors based on text character hashes.
-   */
-  public static generateDeterministicVector(text: string, dimension = 1536): number[] {
-    const vector = new Array(dimension).fill(0);
-    const clean = text.toLowerCase();
-
-    for (let i = 0; i < clean.length; i++) {
-      const charCode = clean.charCodeAt(i);
-      const idx = (i * 31 + charCode) % dimension;
-      vector[idx] += Math.sin(charCode * (i + 1));
-    }
-
-    // Normalize to unit vector
-    let sumSq = 0;
-    for (let i = 0; i < dimension; i++) {
-      sumSq += vector[i] * vector[i];
-    }
-
-    if (sumSq === 0) {
-      vector[0] = 1.0;
-      return vector;
-    }
-
-    const norm = Math.sqrt(sumSq);
-    for (let i = 0; i < dimension; i++) {
-      vector[i] = Number((vector[i] / norm).toFixed(6));
-    }
-
-    return vector;
-  }
 }

@@ -76,14 +76,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     router.push('/login');
   };
 
-  const studentName = profile?.full_name || 'Aarav Patel';
+  const studentName = profile?.full_name || 'Student';
   const studentInitials = studentName
     .split(' ')
     .map(w => w[0])
     .join('')
     .substring(0, 2)
     .toUpperCase();
-  const studentDegree = `${profile?.course || 'Computer Science'} · Semester ${profile?.semester || 1}`;
+  const studentDegree = `${profile?.course || 'Course not set'} · Semester ${profile?.semester ?? 'Not set'}`;
   const studentLevel = profile?.level || 1;
   const studentXp = profile?.xp || 0;
 

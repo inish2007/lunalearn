@@ -10,7 +10,7 @@ import { ReadinessDetails } from './ReadinessDetails';
 export function Dashboard() {
  const {profile,subjects,tasks,exams,readinessMap,risks,plannerContext,asyncState,refreshAll}=useAcademic();
  const [activity,setActivity]=useState<Awaited<ReturnType<typeof api.activity.get>>|null>(null),[activityError,setActivityError]=useState(''),[actionError,setActionError]=useState(''),[busy,setBusy]=useState(false);
- const timezone=profile?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+ const timezone=profile?.timezone || plannerContext?.student.study_time_settings.timezone || 'UTC';
  const dayKey=(date:Date)=>new Intl.DateTimeFormat('en-CA',{timeZone:timezone,year:'numeric',month:'2-digit',day:'2-digit'}).format(date);
  const today=dayKey(new Date());
  const [month,setMonth]=useState(()=>new Date(today+'T12:00:00')),[selected,setSelected]=useState(today);

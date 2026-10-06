@@ -28,6 +28,7 @@ export function Productivity({kind}:{kind:'tasks'|'exams'}) {
   });if(ok)setOpen(false);
  }
  const filtered=(kind==='tasks'?tasks:exams).filter(item=>{
+  if(typeof location !== 'undefined' && location.hash === `#${item.id}`) return true;
   if(!item.title.toLowerCase().includes(query.toLowerCase()) || subject && item.subject_id!==subject)return false;
   if('exam_date' in item)return view==='History'?Date.parse(item.exam_date)<now:Date.parse(item.exam_date)>=now;
   if(priority && item.priority!==priority || type && item.type!==type)return false;

@@ -390,9 +390,9 @@ function Learning() {
                             >
                               + Topic
                             </button>
-                            <button
+                            <button aria-label={`Delete unit ${u.title}`}
                               onClick={() => {
-                                if (confirm(`Delete unit "${u.title}"?`)) deleteUnit(u.id, activeSubject.id);
+                                if (confirm(`Delete unit "${u.title}"?`)) void deleteUnit(u.id, activeSubject.id).catch(e => alert(e.message));
                               }}
                               className="text-muted hover:text-red-600 p-1"
                             >
@@ -408,14 +408,14 @@ function Learning() {
                               <div key={t.id} className="flex items-center justify-between py-2 text-xs">
                                 <div className="flex items-center gap-2">
                                   <input
-                                    type="checkbox"
+                                    type="checkbox" aria-label={`Complete ${t.title}`}
                                     checked={t.status === 'completed'}
                                     onChange={e => {
                                       void handleTopicUpdate(
                                         t.id,
                                         {
                                           status: e.target.checked ? 'completed' : 'in_progress',
-                                          is_weak: e.target.checked ? false : t.is_weak
+                                          is_weak: t.is_weak
                                         },
                                         activeSubject.id
                                       );
@@ -441,7 +441,7 @@ function Learning() {
                                     {t.is_weak ? 'Unmark weak' : 'Mark weak'}
                                   </button>
                                   <button
-                                    onClick={() => deleteTopic(t.id, activeSubject.id)}
+                                    aria-label={`Delete topic ${t.title}`} onClick={() => { void deleteTopic(t.id, activeSubject.id).catch(e => alert(e.message)); }}
                                     className="text-muted hover:text-red-600"
                                   >
                                     <Trash2 size={13} />
@@ -616,16 +616,16 @@ function Learning() {
 // ============================================================================
 function Materials() {
   const [preview, setPreview] = useState<{id: string; name: string} | null>(null);
-  const { materials, subjects, createMaterial, uploadMaterialPdf, deleteMaterial } = useAcademic();
+  const { materials, subjects, uploadMaterialPdf, deleteMaterial } = useAcademic();
   const [query, setQuery] = useState('');
   const [selectedSubjectFilter, setSelectedSubjectFilter] = useState<string>('all');
   useEffect(()=>{setSelectedSubjectFilter(new URLSearchParams(location.search).get('subject') || 'all');},[]);
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [matName, setMatName] = useState('');
   const [matSubjectId, setMatSubjectId] = useState('');
-  const [matType, setMatType] = useState('PDF');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadStage, setUploadStage] = useState('');
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploadTimedOut, setUploadTimedOut] = useState(false);
 
@@ -641,17 +641,8 @@ function Materials() {
     setUploadError(null);
     setUploadTimedOut(false);
     try {
-      if (selectedFile) {
-        await uploadMaterialPdf(selectedFile, matSubjectId);
-      } else if (matName.trim()) {
-        await createMaterial({
-          subject_id: matSubjectId,
-          name: matName.trim(),
-          storage_path: `materials/${matSubjectId}/${matName.trim().replace(/\s+/g, '_')}`,
-          file_type: matType,
-          size_bytes: 1024000
-        });
-      }
+      if (!selectedFile) throw new Error('Select a PDF file to upload.');
+      await uploadMaterialPdf(selectedFile, matSubjectId, undefined, matName, setUploadStage);
       setMatName('');
       setSelectedFile(null);
       setShowUploadModal(false);
@@ -674,7 +665,7 @@ function Materials() {
       <PageHeader
         eyebrow="Personal academic library"
         title="My materials"
-        description="Keep notes, PDFs and slides organized by subject, then let LunaLearn use them to help you study."
+        description="Keep PDF notes organized by subject, then let LunaLearn use them to help you study."
         action={
           <button
             onClick={() => {
@@ -777,7 +768,7 @@ function Materials() {
                       <span className="hidden text-xs font-semibold text-muted sm:block">{sub?.code || 'Course'}</span>
                       <button
                         onClick={() => {
-                          if (confirm(`Delete material "${m.name}"?`)) deleteMaterial(m.id);
+                          if (confirm(`Delete material "${m.name}"?`)) void deleteMaterial(m.id).catch(e => alert(e.message));
                         }}
                         className="text-muted hover:text-red-600 p-1"
                         title="Delete material"
@@ -840,6 +831,7 @@ function Materials() {
                   ))}
                 </select>
               </div>
+              {isUploading && <p role="status" className="text-sm text-primary">{uploadStage}</p>}
               {uploadError && (
                 <div role="alert" className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800">
                   <p>{uploadError}</p>
@@ -901,6 +893,7 @@ function Assistant() {
   const [timeoutRetry, setTimeoutRetry] = useState<{ prompt: string; message: string } | null>(null);
 
   useEffect(()=>{const id=new URLSearchParams(location.search).get('subject');if(id)setSelectedSubId(id);},[]);
+  useEffect(() => { setMaterialId(''); }, [selectedSubId]);
   const activeSub = subjects.find(s => s.id === selectedSubId) || subjects[0];
   const activeMaterials = materials.filter(m => !selectedSubId || m.subject_id === selectedSubId);
 
@@ -1033,7 +1026,7 @@ function Assistant() {
                   className="min-w-0 flex-1 bg-transparent text-sm outline-none"
                   placeholder={`Ask Luna about ${activeSub?.name || 'your studies'}...`}
                 />
-                <button onClick={() => { void send(); }} disabled={sending} className="grid h-10 w-10 place-items-center rounded-xl bg-primary text-white disabled:opacity-50">
+                <button aria-label="Send message" onClick={() => { void send(); }} disabled={sending} className="grid h-10 w-10 place-items-center rounded-xl bg-primary text-white disabled:opacity-50">
                   <Send size={17} />
                 </button>
               </div>
@@ -1062,7 +1055,7 @@ function Assistant() {
             </Card>
 
             <Card>
-              <h2 className="font-bold text-sm">Indexed materials</h2>
+              <h2 className="font-bold text-sm">Material indexing status</h2>
               {activeMaterials.length === 0 ? (
                 <p className="mt-2 text-xs text-muted">No materials uploaded yet for this subject.</p>
               ) : (
@@ -1097,9 +1090,9 @@ function Quizzes() {
   const [quizMaterial, setQuizMaterial] = useState('');
   const [quizTopic, setQuizTopic] = useState('');
   const [questionCount, setQuestionCount] = useState(5);
-  const { plannerContext, subjects, materials, topics, loadUnitsAndTopics, refreshAll } = useAcademic();
+  const { plannerContext, subjects, materials, units, topics, loadUnitsAndTopics, refreshAll } = useAcademic();
   const [selectedSubId, setSelectedSubId] = useState<string>(subjects[0]?.id || '');
-  useEffect(() => { if (selectedSubId) void loadUnitsAndTopics(selectedSubId); }, [selectedSubId, loadUnitsAndTopics]);
+  useEffect(() => { setQuizMaterial(''); setQuizTopic(''); if (selectedSubId) void loadUnitsAndTopics(selectedSubId); }, [selectedSubId, loadUnitsAndTopics]);
   useEffect(()=>{const id=new URLSearchParams(location.search).get('subject');if(id)setSelectedSubId(id);},[]);
   const [generating, setGenerating] = useState(false);
   const [quiz, setQuiz] = useState<GenerateQuizResponseData | null>(null);
@@ -1191,7 +1184,7 @@ function Quizzes() {
         <label>Difficulty <select className="rounded border bg-card p-2" value={difficulty} onChange={e=>setDifficulty(e.target.value as typeof difficulty)}>{['adaptive','easy','medium','hard'].map(d=><option key={d}>{d}</option>)}</select></label>
         <label>Questions <input className="w-16 rounded border bg-card p-2" type="number" min="1" max="10" value={questionCount} onChange={e=>setQuestionCount(Math.max(1,Math.min(10,Number(e.target.value))))}/></label>
         <label>Material <select className="rounded border bg-card p-2" value={quizMaterial} onChange={e=>setQuizMaterial(e.target.value)}><option value="">All indexed PDFs</option>{materials.filter(m=>m.subject_id===selectedSubId && m.processed).map(m=><option value={m.id} key={m.id}>{m.name}</option>)}</select></label>
-        <label>Topic <select className="rounded border bg-card p-2" value={quizTopic} onChange={e=>setQuizTopic(e.target.value)}><option value="">Varied concepts</option>{(plannerContext?.subjects.find(s=>s.subject_id===selectedSubId)?.weak_and_unfinished_topics || []).map(t=><option value={t.id} key={t.id}>{t.title}</option>)}</select></label>
+        <label>Topic <select className="rounded border bg-card p-2" value={quizTopic} onChange={e=>setQuizTopic(e.target.value)}><option value="">Varied concepts</option>{(units[selectedSubId] || []).flatMap(u => topics[u.id] || []).map(t=><option value={t.id} key={t.id}>{t.title}</option>)}</select></label>
       </div>
       <PageHeader
         eyebrow="Practice with feedback"
@@ -1334,7 +1327,7 @@ function Quizzes() {
                   </span>
                   <h2 className="mt-4 text-xl font-black">Practice Session</h2>
                   <p className="mt-2 text-sm text-muted max-w-xs mx-auto">
-                    Take a 5-question adaptive quiz to identify weak areas and reinforce your retention.
+                    Take a {questionCount}-question {difficulty} quiz to identify weak areas and reinforce your retention.
                   </p>
                   {quizErrorNotice}
                   {subjects.length > 0 && (
@@ -1424,7 +1417,7 @@ function Analytics() {
             <Card>
               <p className="text-xs font-bold uppercase tracking-wider text-muted">Average Readiness</p>
               <p className="mt-2 text-3xl font-black text-deep">{totalReadiness}%</p>
-              <p className="mt-1 text-xs text-muted">Calculated across {subjects.length} courses</p>
+              <p className="mt-1 text-xs text-muted">Arithmetic mean across {readinessList.length} returned subject readiness scores</p>
             </Card>
             <Card>
               <p className="text-xs font-bold uppercase tracking-wider text-muted">Active Courses</p>
@@ -1436,7 +1429,7 @@ function Analytics() {
               <p className="mt-2 text-3xl font-black text-primary">
                 {totalReadiness >= 70 ? 'On Track' : 'Needs Focus'}
               </p>
-              <p className="mt-1 text-xs text-muted">Based on 4-factor academic engine</p>
+              <p className="mt-1 text-xs text-muted">On Track means average readiness ≥ 70%; otherwise Needs Focus</p>
             </Card>
           </div>
         </div>
@@ -1453,7 +1446,7 @@ function Simulator() { return <SimulatorView />; }
 function Profile() {
   const { profile, subjects, readinessMap } = useAcademic();
 
-  const studentName = profile?.full_name || 'Aarav Patel';
+  const studentName = profile?.full_name || 'Student';
   const studentInitials = studentName
     .split(' ')
     .map(w => w[0])
@@ -1491,7 +1484,7 @@ function Profile() {
             <div className="mt-6 rounded-2xl bg-purple-50 p-3 text-left">
               <p className="text-xs text-muted">Focus style</p>
               <p className="mt-1 text-sm font-bold text-deep">
-                {profile?.preferred_focus_time || 'Evenings (5:30 PM - 8:30 PM)'}
+                {profile?.preferred_focus_time || 'Not set'}
               </p>
             </div>
           </Card>

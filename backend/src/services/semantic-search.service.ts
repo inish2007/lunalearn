@@ -191,9 +191,9 @@ export class SemanticSearchService {
         }
       }
 
-      // If chunk has no stored embedding, generate deterministic vector from content
+      // Missing vectors cannot be compared to provider embeddings. Re-index these files.
       if (!chunkVec || chunkVec.length === 0) {
-        chunkVec = EmbeddingService.generateDeterministicVector(chunk.content);
+        continue;
       }
 
       const similarity = EmbeddingService.cosineSimilarity(queryEmbedding, chunkVec);

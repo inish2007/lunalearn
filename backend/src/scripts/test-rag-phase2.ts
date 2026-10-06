@@ -102,6 +102,7 @@ function createMockDb(initialSubjects: any[], initialUnits: any[], initialMateri
           data: filtered[0] || null,
           error: filtered[0] ? null : { message: 'Row not found' }
         }),
+        update: (values: any) => { for (const row of filtered) Object.assign(row,values); return query; },
         insert: (rows: any | any[]) => {
           const toInsert = Array.isArray(rows) ? rows : [rows];
           const inserted = toInsert.map((r, idx) => ({

@@ -226,8 +226,8 @@ export class PlannerContextService {
       student: {
         id: userId,
         full_name: profile?.full_name || null,
-        course: profile?.course || 'Computer Science',
-        semester: profile?.semester || 1,
+        course: profile?.course || 'Not set',
+        semester: profile?.semester ?? 1,
         study_time_settings: studySettings
       },
       subjects: subjectContexts,

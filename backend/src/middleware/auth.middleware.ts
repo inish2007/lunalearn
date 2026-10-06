@@ -49,20 +49,29 @@ export function requireAuth(handler: AuthenticatedHandler) {
       return;
     }
 
+    let user: User;
     try {
+      user = await verifyUserToken(token);
+    } catch {
+      res.writeHead(401, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Unauthorized', message: 'Invalid or expired session' }));
+      return;
+    }
+    {
       // 1. Verify token with Supabase Auth
-      const user = await verifyUserToken(token);
+
 
       // 2. Instantiate scoped database client enforcing RLS in Postgres
       const db = createScopedClient(token);
 
       // 3. Fetch user profile safely
-      const { data: profile } = await db
+      const { data: profile, error: profileError } = await db
         .from('profiles')
         .select('*')
         .eq('id', user.id)
         .maybeSingle();
 
+      if (profileError) throw new Error('Profile could not be loaded');
       const context: AuthenticatedContext = {
         user,
         token,
@@ -72,13 +81,7 @@ export function requireAuth(handler: AuthenticatedHandler) {
 
       // 4. Pass execution to protected handler
       await handler(req, res, context);
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Invalid or expired session';
-      res.writeHead(401, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({
-        error: 'Unauthorized',
-        message
-      }));
+
     }
   };
 }

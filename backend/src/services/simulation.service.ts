@@ -20,12 +20,16 @@ export class SimulationService {
   subject.weak_and_unfinished_topics=subject.weak_and_unfinished_topics.filter(t=>!input.completed_topic_ids.includes(t.id) || t.is_weak);
   const sessions=await db.from('study_sessions').select('*');
   if(sessions.error)throw AppError.internal('Could not load sessions');
-  context.study_plan=ScheduleService.build(context,sessions.data || []);
+  // Additional study consumes capacity today; it is not a free readiness gain.
+  const now=new Date();
+  const projectedSessions=[...(sessions.data || [])];
+  if(input.additional_minutes>0)projectedSessions.push({subject_id:input.subject_id,started_at:now.toISOString(),duration_minutes:input.additional_minutes,session_type:'focus'});
+  context.study_plan=ScheduleService.build(context,projectedSessions,now);
   let feasible=true,reason='The scenario fits the current feasibility rules.';
   try {PlannerContextService.assertPlanFeasible(context);}catch(e){feasible=false;reason=e instanceof Error?e.message:'Insufficient data';}
-  const required=context.study_plan.required_hours;
+  const required=context.study_plan.status==='insufficient_data'?null:context.study_plan.required_hours;
   const available=context.study_plan.available_hours;
   const projected=Engine.calculateWeightedReadiness(breakdown);
-  return {baseline:baseline.readiness_percentage,projected,delta:projected-baseline.readiness_percentage,baseline_breakdown:baseline.breakdown,projected_breakdown:breakdown,required_hours:required,available_hours:available,feasible,reason,assumptions:['Hypothetical activity only; nothing saved.','Quiz scores and assignment completion remain unchanged.','Revision is capped at 120 minutes in the rolling seven-day window.','Completing a topic does not clear its weak marker.']};
+  return {baseline:baseline.readiness_percentage,projected,delta:projected-baseline.readiness_percentage,baseline_breakdown:baseline.breakdown,projected_breakdown:breakdown,required_hours:required,available_hours:available,feasible,reason,assumptions:['Hypothetical activity only; nothing saved. Additional minutes consume today’s availability.','Quiz scores and assignment completion remain unchanged.','Revision is capped at 120 minutes in the rolling seven-day window.','Completing a topic does not clear its weak marker.']};
  }
 }

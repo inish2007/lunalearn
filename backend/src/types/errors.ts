@@ -323,6 +323,7 @@ export class AppError extends Error {
       code: ErrorCode.INSUFFICIENT_DATA,
       statusCode: 422,
       message,
+      userMessage: message,
       retryable: false
     });
   }

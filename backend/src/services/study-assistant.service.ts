@@ -34,7 +34,7 @@ function escapeUntrustedDocumentText(text: string): string {
 }
 
 export class StudyAssistantService {
-  public static readonly DEFAULT_MODEL = 'gemini-3.8-flash';
+  public static readonly DEFAULT_MODEL = 'gemini-flash-latest';
   public static readonly FALLBACK_MODEL = 'gemini-flash-latest';
 
   public static getModelName(): string {
@@ -159,7 +159,7 @@ export class StudyAssistantService {
       model: result.isFallback ? 'deterministic-fallback' : model,
       is_fallback: result.isFallback,
       notice: result.isFallback
-        ? 'AI provider is temporarily resting or experiencing rate limits. Provided curriculum-aligned structured answer.'
+        ? 'Gemini is unavailable. This is a deterministic fallback using available excerpts and general study guidance.'
         : undefined
     };
   }

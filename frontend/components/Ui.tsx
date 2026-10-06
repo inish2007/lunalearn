@@ -126,34 +126,3 @@ export function TaskRow({ title, meta, done = false }: { title: string; meta: st
   );
 }
 
-export function Mission({ compact = false }: { compact?: boolean }) {
-  return (
-    <div
-      className={`glare-hover relative overflow-hidden rounded-3xl bg-gradient-to-br from-deep via-primary to-accent p-5 text-white shadow-float ${
-        compact ? '' : 'md:p-7'
-      }`}
-    >
-      <div className="absolute -right-10 -top-12 h-40 w-40 rounded-full bg-white/15 blur-2xl" />
-      <div className="relative">
-        <div className="mb-4 flex items-center justify-between">
-          <span className="flex items-center gap-2 text-xs font-bold uppercase tracking-[.16em] text-white/80">
-            <Sparkles size={15} /> Today&apos;s mission
-          </span>
-          <span className="rounded-full bg-white/15 px-3 py-1 text-xs">2h 15m</span>
-        </div>
-        <h2 className={`${compact ? 'text-lg' : 'text-2xl'} font-black`}>Stabilize DBMS readiness</h2>
-        <p className="mt-2 max-w-md text-sm leading-6 text-white/85">
-          Revise Normalization, complete your schema assignment, then take a focused 5-question check-in.
-        </p>
-        <button className="mt-5 inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-bold text-deep shadow-md hover:bg-white/90 transition">
-          Start focus session <ArrowUpRight size={16} />
-        </button>
-      </div>
-    </div>
-  );
-}
-
-export const statMeta = [
-  { label: 'Study streak', value: '12 days', icon: Clock3 },
-  { label: 'Tasks done', value: '18 / 24', icon: CheckCircle2 }
-];

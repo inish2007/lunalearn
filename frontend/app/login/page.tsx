@@ -135,7 +135,7 @@ export default function LoginPage() {
   };
 
   // --------------------------------------------------------------------------
-  // Onboarding Step 3A: Import Syllabus Simulation / Pipeline
+  // Onboarding Step 3A: Upload real syllabus PDF
   // --------------------------------------------------------------------------
   const handleProcessSyllabus = async () => {
     if (!createdSubjectId) return;
@@ -143,18 +143,10 @@ export default function LoginPage() {
     setSyllabusStatus('Uploading syllabus document...');
 
     try {
-      await new Promise(r => setTimeout(r, 600));
-      setSyllabusStatus('Analyzing syllabus structure with LunaLearn AI...');
-      await new Promise(r => setTimeout(r, 800));
-      setSyllabusStatus('Extracting units, modules, and topic hierarchy...');
-      await new Promise(r => setTimeout(r, 800));
-
-      const fileName = uploadedFile ? uploadedFile.name : `${subjectName}_Syllabus.pdf`;
-      await importSyllabus(createdSubjectId, fileName);
-
-      setSyllabusStatus('Roadmap ready! Redirecting to your workspace...');
-      await new Promise(r => setTimeout(r, 500));
-      router.push('/dashboard');
+      if (!uploadedFile) throw new Error('Select a PDF file first.');
+      await importSyllabus(createdSubjectId, uploadedFile);
+      setSyllabusStatus('PDF uploaded. Add your units and topics in My Learning.');
+      router.push('/learning');
     } catch (err: unknown) {
       setAuthError(err instanceof Error ? err.message : 'Error processing syllabus');
       setProcessingSyllabus(false);

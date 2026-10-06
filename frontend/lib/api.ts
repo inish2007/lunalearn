@@ -627,10 +627,11 @@ export const api = {
         subjectId: string;
         fileName: string;
         status: 'UPLOADED' | 'VALIDATING' | 'EXTRACTING' | 'CHUNKING' | 'EMBEDDING' | 'INDEXING' | 'READY' | 'FAILED';
-        progressPercent: number;
+        progressPercent: number | null;
         error?: string;
         materialId?: string;
-        chunksCount?: number;
+        chunksCreated?: number;
+        totalPages?: number;
       }>(`/rag/jobs/${encodeURIComponent(jobId)}`, { signal });
     },
 

@@ -102,10 +102,10 @@ interface AcademicContextType {
   deleteExam: (id: string) => Promise<void>;
 
   createMaterial: (payload: { subject_id: string; unit_id?: string | null; name: string; storage_path: string; file_type?: string; size_bytes?: number }) => Promise<Material>;
-  uploadMaterialPdf: (file: File, subjectId: string, unitId?: string) => Promise<any>;
+  uploadMaterialPdf: (file: File, subjectId: string, unitId?: string, customName?: string, onProgress?: (message: string) => void) => Promise<any>;
   deleteMaterial: (id: string) => Promise<void>;
 
-  importSyllabus: (subjectId: string, fileName: string) => Promise<{ units: Unit[]; topics: Topic[] }>;
+  importSyllabus: (subjectId: string, file: File) => Promise<{ units: Unit[]; topics: Topic[] }>;
 }
 
 const AcademicContext = createContext<AcademicContextType | null>(null);
@@ -289,8 +289,10 @@ export function AcademicProvider({ children }: { children: React.ReactNode }) {
           setTopics(prev => ({ ...prev, [u.id]: topicList || [] }));
         }
       }
-    } catch (_err) {
-      // Ignored for clean UI state
+    } catch (err) {
+      const error = err instanceof ClientAppError ? err : new ClientAppError({code: 'FETCH_ERROR', message: 'Syllabus could not be loaded. Please retry.', retryable: true});
+      setAppError(error);
+      setAsyncState(prev => ({ ...prev, status: 'error', error }));
     }
   }, []);
 
@@ -473,17 +475,30 @@ export function AcademicProvider({ children }: { children: React.ReactNode }) {
    * Honest Upload: Sends real PDF to backend ingestion pipeline.
    * Never silently fakes success or suppresses backend validation failures.
    */
-  const uploadMaterialPdf = async (file: File, subjectId: string, unitId?: string) => {
+  const uploadMaterialPdf = async (file: File, subjectId: string, unitId?: string, customName?: string, onProgress?: (message: string) => void) => {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('subject_id', subjectId);
     if (unitId) formData.append('unit_id', unitId);
-    formData.append('name', file.name);
+    formData.append('name', customName?.trim() || file.name);
 
-    // Call real RAG upload endpoint
-    const result = await api.rag.upload(formData);
-    await refreshAll();
-    return result;
+    try {
+      if (onProgress) {
+        onProgress('Uploading PDF…');
+        const created = await api.rag.uploadAsync(formData);
+        for (let attempt = 0; attempt < 120; attempt++) {
+          const job = await api.rag.pollJob(created.jobId);
+          onProgress(`${job.status.toLowerCase()}${job.totalPages != null ? ` · ${job.totalPages} pages extracted` : ''}${job.chunksCreated != null ? ` · ${job.chunksCreated} text chunks prepared` : ''}`);
+          if (job.status === 'FAILED') throw new Error(job.error || 'Indexing failed. The original PDF remains available in My Materials.');
+          if (job.status === 'READY') { await refreshAll(); return job; }
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+        throw new Error('Processing is still running. Refresh My Materials to check indexing status before uploading again.');
+      }
+      const result = await api.rag.upload(formData);
+      await refreshAll();
+      return result;
+    } catch (error) { await refreshAll(); throw error; }
   };
 
   const deleteMaterial = async (id: string) => {
@@ -491,52 +506,10 @@ export function AcademicProvider({ children }: { children: React.ReactNode }) {
     await refreshAll();
   };
 
-  // Import syllabus extraction pipeline
-  const importSyllabus = async (subjectId: string, fileName: string) => {
-    // 1. Register material metadata
-    await api.materials.create({
-      subject_id: subjectId,
-      name: fileName,
-      storage_path: `materials/${subjectId}/${fileName}`,
-      file_type: 'PDF',
-      size_bytes: 2048000,
-      processed: true
-    });
-
-    // 2. Provision syllabus units & topics
-    const u1 = await api.units.create({
-      subject_id: subjectId,
-      unit_number: 1,
-      title: 'Foundations & Core Principles'
-    });
-    const u2 = await api.units.create({
-      subject_id: subjectId,
-      unit_number: 2,
-      title: 'Design & Architecture'
-    });
-
-    const t1 = await api.topics.create({
-      unit_id: u1.id,
-      title: 'Core Concepts & Terminology',
-      status: 'in_progress',
-      is_weak: false,
-      mastery_score: 50
-    });
-    const t2 = await api.topics.create({
-      unit_id: u2.id,
-      title: 'Applied Systems & Practice',
-      status: 'not_started',
-      is_weak: true,
-      mastery_score: 20
-    });
-
-    await loadUnitsAndTopics(subjectId);
-    await refreshAll();
-
-    return {
-      units: [u1, u2],
-      topics: [t1, t2]
-    };
+  // Upload only: automatic syllabus extraction is not implemented.
+  const importSyllabus = async (subjectId: string, file: File) => {
+    await uploadMaterialPdf(file, subjectId);
+    return { units: [], topics: [] };
   };
 
   return (

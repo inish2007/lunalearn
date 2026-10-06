@@ -10,6 +10,7 @@
  * - Reasoned academic risks
  */
 
+import { ScheduleService } from '../services/schedule.service.js';
 import { PlannerContextService } from '../services/planner-context.service.js';
 import { PlannerContextResponse } from '../types/database.js';
 import { AppError, ErrorCode } from '../types/errors.js';
@@ -220,8 +221,8 @@ async function runPlannerTests() {
     'Preferred focus time extracted from student settings'
   );
   assert(
-    context.student.study_time_settings.daily_study_target_minutes === 120,
-    'Daily study target benchmark configured (120 min)'
+    context.student.study_time_settings.daily_study_target_minutes === 90,
+    'Daily study target target follows saved 1.5 hour availability (90 min)'
   );
   assert(
     context.student.study_time_settings.available_hours_per_day === 1.5,
@@ -294,46 +295,19 @@ async function runPlannerTests() {
   assert(Boolean(context.generated_at), 'Timestamp generated');
 
   console.log('\n2. Testing Planner Capacity Constraints...');
-  PlannerContextService.assertPlanFeasible(context);
-  assert(true, 'Plan is feasible when estimated hours fit the available exam window');
-
-  const overCapacityContext: PlannerContextResponse = {
-    ...context,
-    student: {
-      ...context.student,
-      study_time_settings: { ...context.student.study_time_settings, available_hours_per_day: 1 }
-    }
-  };
-  try {
-    PlannerContextService.assertPlanFeasible(overCapacityContext);
-    assert(false, 'Rejects a plan whose topic hours exceed exam-window capacity');
-  } catch (error) {
-    assert(
-      error instanceof AppError && error.code === ErrorCode.CONSTRAINT_CONFLICT && error.statusCode === 422 &&
-      error.message.includes('Increase your daily study availability'),
-      'Returns actionable typed 422 CONSTRAINT_CONFLICT when the plan does not fit'
-    );
-  }
-
-  const unestimatedContext: PlannerContextResponse = {
-    ...context,
-    subjects: context.subjects.map(subject => ({
-      ...subject,
-      weak_and_unfinished_topics: subject.weak_and_unfinished_topics.map((topic, index) =>
-        index === 0 ? { ...topic, estimated_study_hours: null } : topic
-      )
-    }))
-  };
-  try {
-    PlannerContextService.assertPlanFeasible(unestimatedContext);
-    assert(false, 'Rejects plan generation when imminent topic estimates are missing');
-  } catch (error) {
-    assert(
-      error instanceof AppError && error.code === ErrorCode.INSUFFICIENT_DATA && error.statusCode === 422 &&
-      error.message.includes('Add estimated study hours'),
-      'Requires real estimates instead of fabricating topic study time'
-    );
-  }
+  try { PlannerContextService.assertPlanFeasible(context); assert(false,'Missing task estimates must fail'); }
+  catch(error) { assert(error instanceof AppError && error.code===ErrorCode.INSUFFICIENT_DATA,'Missing task estimates are surfaced'); }
+  const ready = structuredClone(context);
+  ready.student.study_time_settings.available_hours_per_day=4;
+  ready.student.study_time_settings.focus_start='08:00';ready.student.study_time_settings.focus_end='20:00';
+  for(const subject of ready.subjects)for(const task of subject.pending_tasks)task.estimated_minutes=10;
+  for(const task of ready.unassigned_pending_tasks)task.estimated_minutes=10;
+  ready.study_plan=ScheduleService.build(ready);
+  PlannerContextService.assertPlanFeasible(ready);assert(true,'All estimated work fits shared availability');
+  ready.student.study_time_settings.available_hours_per_day=0;
+  ready.study_plan=ScheduleService.build(ready);
+  try { PlannerContextService.assertPlanFeasible(ready);assert(false,'Zero capacity rejected'); }
+  catch(error) {assert(error instanceof AppError && error.code===ErrorCode.CONSTRAINT_CONFLICT,'Zero availability is preserved and creates a capacity conflict');}
 
   mockProfile.available_hours_per_day = null;
   const defaultAvailabilityContext = await PlannerContextService.getPlannerContext(mockDb, 'student-1');

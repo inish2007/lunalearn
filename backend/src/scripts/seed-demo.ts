@@ -49,8 +49,8 @@ export async function seedDemoDataset(db: any, targetProfileId: string = DEMO_PR
     email: 'aarav.patel@example.com',
     course: 'Computer Science & Engineering',
     semester: 4,
-    xp: 450,
-    level: 3,
+    xp: 0,
+    level: 1,
     preferred_focus_time: 'Evening (5:30 PM - 8:30 PM)',
     updated_at: now.toISOString()
   };
@@ -97,19 +97,19 @@ export async function seedDemoDataset(db: any, targetProfileId: string = DEMO_PR
   // 4. Insert Units
   const unitsPayload = [
     {
-      id: 'u1-relational-sql',
+      id: 'd77ad489-9408-5fbf-9283-47eab4f434b8',
       subject_id: DEMO_SUBJECT_ID,
       unit_number: 1,
       title: 'Data Modeling & Relational Query Languages'
     },
     {
-      id: 'u2-norm-theory',
+      id: 'c42a0982-3a70-5f5e-8422-a888252d3c00',
       subject_id: DEMO_SUBJECT_ID,
       unit_number: 2,
       title: 'Relational Database Design & Normalization'
     },
     {
-      id: 'u3-tx-indexing',
+      id: 'dcbb79c9-7cb0-544e-9ac9-9c8d1590a3ba',
       subject_id: DEMO_SUBJECT_ID,
       unit_number: 3,
       title: 'Transaction Processing & Index Structures'
@@ -129,40 +129,40 @@ export async function seedDemoDataset(db: any, targetProfileId: string = DEMO_PR
   // - Indexing (partial)
   const topicsPayload = [
     {
-      id: 'top-sql',
-      unit_id: 'u1-relational-sql',
+      id: 'c85a3429-ae61-508f-925a-9516cfe761da',
+      unit_id: 'd77ad489-9408-5fbf-9283-47eab4f434b8',
       title: 'SQL',
       status: 'completed',
       is_weak: false,
       mastery_score: 90
     },
     {
-      id: 'top-er-model',
-      unit_id: 'u1-relational-sql',
+      id: '3f83e1ef-b503-5b21-942e-4869bc80611d',
+      unit_id: 'd77ad489-9408-5fbf-9283-47eab4f434b8',
       title: 'ER Model',
       status: 'completed',
       is_weak: false,
       mastery_score: 88
     },
     {
-      id: 'top-norm',
-      unit_id: 'u2-norm-theory',
+      id: 'bf112d71-7b9f-5ed6-8b5b-9524a9765cf8',
+      unit_id: 'c42a0982-3a70-5f5e-8422-a888252d3c00',
       title: 'Normalization',
       status: 'in_progress',
       is_weak: true,
       mastery_score: 45
     },
     {
-      id: 'top-tx',
-      unit_id: 'u3-tx-indexing',
+      id: 'aae8db2d-dbc5-59b3-a574-6b26221a0385',
+      unit_id: 'dcbb79c9-7cb0-544e-9ac9-9c8d1590a3ba',
       title: 'Transactions',
       status: 'in_progress',
       is_weak: true,
       mastery_score: 40
     },
     {
-      id: 'top-idx',
-      unit_id: 'u3-tx-indexing',
+      id: 'd9760a55-a6b0-552b-a77e-f6333cccddd8',
+      unit_id: 'dcbb79c9-7cb0-544e-9ac9-9c8d1590a3ba',
       title: 'Indexing',
       status: 'in_progress',
       is_weak: false,
@@ -177,7 +177,7 @@ export async function seedDemoDataset(db: any, targetProfileId: string = DEMO_PR
 
   // 6. Insert Exam in 6 days
   const examPayload = {
-    id: 'exam-dbms-midsem',
+    id: '78e8486a-9a47-5268-bb52-c4ba25b0ee9a',
     profile_id: targetProfileId,
     subject_id: DEMO_SUBJECT_ID,
     title: 'DBMS Mid-semester',
@@ -194,7 +194,7 @@ export async function seedDemoDataset(db: any, targetProfileId: string = DEMO_PR
   // 7. Insert Tasks (pending assignment)
   const tasksPayload = [
     {
-      id: 'task-norm-probset',
+      id: 'f412726b-a473-550d-bb32-1a92c859da43',
       profile_id: targetProfileId,
       subject_id: DEMO_SUBJECT_ID,
       title: 'Normalization Problem Set',
@@ -213,12 +213,12 @@ export async function seedDemoDataset(db: any, targetProfileId: string = DEMO_PR
   // 8. Insert Initial Quiz Result
   const quizPayload = [
     {
-      id: 'quiz-init-dbms',
+      id: '1c993a23-b987-5ef3-9957-ad23ba16a78c',
       profile_id: targetProfileId,
       subject_id: DEMO_SUBJECT_ID,
       score: 75,
-      total_questions: 10,
-      correct_answers: 7,
+      total_questions: 20,
+      correct_answers: 15,
       weak_topics_identified: ['Normalization']
     }
   ];
@@ -231,10 +231,12 @@ export async function seedDemoDataset(db: any, targetProfileId: string = DEMO_PR
   // 9. Insert Study Session (60 mins revision)
   const sessionPayload = [
     {
-      id: 'session-init-rev',
+      id: 'cb50c607-b956-5d10-b315-94d733e89b6b',
       profile_id: targetProfileId,
       subject_id: DEMO_SUBJECT_ID,
       duration_minutes: 60,
+      started_at: new Date(now.getTime()-65*60000).toISOString(),
+      ended_at: new Date(now.getTime()-5*60000).toISOString(),
       session_type: 'revision',
       notes: 'Reviewed ER diagrams and SQL joins.'
     }
@@ -282,11 +284,13 @@ async function main() {
     }
   } else {
     console.log('\nℹ️  Live Supabase credentials not set in backend/.env.');
-    console.log('   Running in local simulation mode. Verification scripts will use programmatic state.\n');
-    // Simulate seed run
-    const inMemoryDb = createInMemoryStore();
-    await seedDemoDataset(inMemoryDb);
-    console.log('\n✨ Demo dataset validated successfully.\n');
+    const { LocalDevStore } = await import('../lib/local-store.js');
+    const store=LocalDevStore.getInstance();
+    let auth;
+    try { auth=await store.signIn({email:'aarav.patel@example.com',password:'password123'}); }
+    catch { auth=await store.signUp({email:'aarav.patel@example.com',password:'password123',full_name:'Aarav Patel',course:'Computer Science & Engineering',semester:4}); }
+    await seedDemoDataset(store.createClient(auth.user.id),auth.user.id);
+    console.log('Local demo is saved. Use the explicitly labeled demo login.');
   }
 }
 

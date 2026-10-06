@@ -50,7 +50,7 @@ export class RagMaterialService {
 
     try {
       // 1. VALIDATING
-      RagJobsService.updateJob(activeJobId, { status: 'VALIDATING', progressPercent: 20 });
+      RagJobsService.updateJob(activeJobId, { status: 'VALIDATING', progressPercent: null });
 
       // Server-side independent validation of magic bytes (%PDF-) and file size
       if (fileBuffer.length > PdfService.MAX_FILE_SIZE_BYTES) {
@@ -96,14 +96,39 @@ export class RagMaterialService {
         fileBuffer
       );
 
+      const materialRecordName = (customName && customName.trim()) || fileName;
+
+      const { data: materialDataRaw, error: insertError } = await table(db, 'materials')
+        .insert({
+          profile_id: profileId,
+          subject_id: subjectId,
+          unit_id: unitId ?? null,
+          name: materialRecordName,
+          storage_path: storageResult.storagePath,
+          file_type: 'PDF',
+          size_bytes: fileBuffer.length,
+          processed: false
+        })
+        .select('*')
+        .single();
+
+      if (insertError || !materialDataRaw) {
+        throw AppError.internal(`Failed to save material record: ${insertError?.message || 'Database insert failed'}`);
+      }
+
+      const materialData: Material = materialDataRaw as Material;
+      const materialId = materialData.id;
+
+      RagJobsService.updateJob(activeJobId, { materialId });
+
       // 2. EXTRACTING
-      RagJobsService.updateJob(activeJobId, { status: 'EXTRACTING', progressPercent: 40 });
+      RagJobsService.updateJob(activeJobId, { status: 'EXTRACTING', progressPercent: null });
       const extracted = await PdfService.extractText(fileBuffer);
 
       // 3. CHUNKING
       RagJobsService.updateJob(activeJobId, {
         status: 'CHUNKING',
-        progressPercent: 60,
+        progressPercent: null,
         totalPages: extracted.totalPages
       });
       const chunkDrafts = ChunkingService.chunkPdf(
@@ -116,37 +141,14 @@ export class RagMaterialService {
       // 4. EMBEDDING
       RagJobsService.updateJob(activeJobId, {
         status: 'EMBEDDING',
-        progressPercent: 80,
+        progressPercent: null,
         chunksCreated: chunkDrafts.length
       });
       const chunkContents = chunkDrafts.map(d => d.content);
       const embeddings = await EmbeddingService.embedBatch(chunkContents);
 
       // 5. INDEXING
-      RagJobsService.updateJob(activeJobId, { status: 'INDEXING', progressPercent: 90 });
-      const materialRecordName = (customName && customName.trim()) || fileName;
-
-      const { data: materialDataRaw, error: insertError } = await table(db, 'materials')
-        .insert({
-          profile_id: profileId,
-          subject_id: subjectId,
-          unit_id: unitId ?? null,
-          name: materialRecordName,
-          storage_path: storageResult.storagePath,
-          file_type: 'PDF',
-          size_bytes: fileBuffer.length,
-          processed: true
-        })
-        .select('*')
-        .single();
-
-      if (insertError || !materialDataRaw) {
-        throw AppError.internal(`Failed to save material record: ${insertError?.message || 'Database insert failed'}`);
-      }
-
-      const materialData: Material = materialDataRaw as Material;
-      const materialId = materialData.id;
-
+      RagJobsService.updateJob(activeJobId, { status: 'INDEXING', progressPercent: null });
       const chunkRows = chunkDrafts.map((draft, idx) => ({
         material_id: materialId,
         profile_id: profileId,
@@ -181,6 +183,9 @@ export class RagMaterialService {
         }
       }
 
+      const { error: readyError } = await table(db, 'materials').update({ processed: true }).eq('id', materialId);
+      if (readyError) throw AppError.internal('Could not mark material indexed.', readyError);
+      materialData.processed = true;
       // 6. READY
       RagJobsService.updateJob(activeJobId, {
         status: 'READY',

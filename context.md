@@ -159,3 +159,17 @@ Dashboard redesigned around nearest exam/readiness basis, logged study, next sch
 
 ### Phase 13
 Natural-language command design documented in docs/NATURAL-LANGUAGE-COMMANDS-PLAN.md: typed intents, scoped name resolution, write previews, idempotency and material-move requirements. No command runtime or folder schema implemented.
+
+### Phase 14: Real-data and inert-control sweep
+- **Changes**: Completed full route-by-route audit (Dashboard, Materials, Assistant, Quizzes, Learning, Planner, Tasks, Exams, Simulator, Analytics, Profile, Settings). Removed invented onboarding syllabus; switched local search to stored-vector comparisons; indexing failure preserves original PDF content and retrieval; removed unused Ui.Mission and statMeta demo exports; Assistant indexed materials reflects real processing state; RAG job progress displays named stages with measured extracted page and chunk counts; Analytics labels 70% mastery threshold and sample size; eliminated CountUpAll global numeric-text mutation; corrected Simulator "Unknownh" display and charges study against availability; ensured Settings preserves zero availability after reload.
+- **Contract Differences**: RAG jobs return progressPercent: null during processing (100 READY, 0 FAILED) and measured totalPages/chunksCreated; backend-only quiz answer isolation via migration 20261006000005_quiz_answer_isolation.sql with security-definer submission RPC; INSUFFICIENT_DATA.userMessage preserves actionable guidance; simulation reports  required_hours: null when estimates are missing.
+- **Verification Results**:
+  - Backend Typecheck: tsc --noEmit passed with 0 errors.
+  - Regression Suites: 10/10 test suites passed (test-auth, test-crud, test-engine, test-planner, test-e2e-loop, test-rag-phase1, test-rag-phase2, test-assistant-phase3, test-quiz-phase4, test-real-data).
+  - Frontend Production Build: npm run build passed with 18/18 static routes compiled and prerendered.
+  - End-to-End Flow: test-http-core-loop.ts passed 11/11 assertions (signup, academic setup, readiness basis, PDF upload/preview, assistant citations, grounded quiz generation, authoritative scoring, weak-topic feedback, updated planner mission).
+  - Live Gemini Provider: Verified independently on retry (2 grounded questions, 1,536-dim embeddings via test-live-gemini.ts).
+- **Remaining Limitations**:
+  - Live Supabase migrations/storage/RLS unverified in this local checkout (all 5 additive 20261006 migrations must be executed for live Supabase deployment).
+  - OCR (phase 3) and natural-language commands (phase 13) remain documentation-only as specified.
+  - Live Gemini generation is subject to external quota/transient 503 limits when not using the fixture mock.

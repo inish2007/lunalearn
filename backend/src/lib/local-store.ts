@@ -167,11 +167,11 @@ export class LocalDevStore {
           email,
           full_name: existing.full_name || email.split('@')[0],
           avatar_url: existing.avatar_url || null,
-          course: existing.course || 'B.Tech',
+          course: existing.course || 'Not set',
           semester: existing.semester || 4,
           xp: 0,
           level: 1,
-          preferred_focus_time: 'Evenings',
+          preferred_focus_time: '17:00–19:00 (default)',
           available_hours_per_day: null,
           created_at: existing.created_at,
           updated_at: new Date().toISOString()
@@ -218,7 +218,7 @@ export class LocalDevStore {
       email,
       password: input.password || 'password123',
       full_name: input.full_name || email.split('@')[0],
-      course: input.course || 'Computer Science & Engineering',
+      course: input.course || 'Not set',
       semester: input.semester || 4,
       avatar_url: input.avatar_url || null,
       created_at: now,
@@ -230,11 +230,11 @@ export class LocalDevStore {
       email,
       full_name: localUser.full_name || email.split('@')[0],
       avatar_url: localUser.avatar_url || null,
-      course: localUser.course || 'B.Tech',
+      course: localUser.course || 'Not set',
       semester: localUser.semester || 4,
       xp: 0,
       level: 1,
-      preferred_focus_time: 'Evenings',
+      preferred_focus_time: '17:00–19:00 (default)',
       available_hours_per_day: null,
       created_at: now,
       updated_at: now
@@ -291,11 +291,11 @@ export class LocalDevStore {
         email: localUser.email,
         full_name: localUser.full_name || localUser.email.split('@')[0],
         avatar_url: localUser.avatar_url || null,
-        course: localUser.course || 'B.Tech',
+        course: localUser.course || 'Not set',
         semester: localUser.semester || 4,
         xp: 0,
         level: 1,
-        preferred_focus_time: 'Evenings',
+        preferred_focus_time: '17:00–19:00 (default)',
         available_hours_per_day: null,
         created_at: now,
         updated_at: now
@@ -508,17 +508,23 @@ export class LocalDevStore {
           const matchCount = args.match_count || 5;
 
           const filtered = chunks.filter(c => {
-            if (profileId && c.profile_id !== profileId) return false;
-            if (subjectId && (c.metadata as any)?.subject_id !== subjectId) return false;
+            if (!scopedUserId || c.profile_id !== scopedUserId || (profileId && c.profile_id !== profileId)) return false;
+            if (subjectId && !self.state.materials.some(m => m.id === c.material_id && m.subject_id === subjectId && m.profile_id === scopedUserId)) return false;
             if (materialId && c.material_id !== materialId) return false;
             return true;
           });
 
           return {
-            data: filtered.slice(0, matchCount).map(c => ({
-              ...c,
-              similarity: 0.85
-            })),
+            data: filtered.flatMap(c => {
+              let vector: number[];
+              try { vector = typeof c.embedding === 'string' ? JSON.parse(c.embedding) : c.embedding as number[]; } catch { return []; }
+              const query = args.query_embedding;
+              if (!Array.isArray(vector) || !Array.isArray(query) || vector.length !== query.length || !vector.length || ![...vector, ...query].every(Number.isFinite)) return [];
+              const norm = Math.sqrt(vector.reduce((sum, v) => sum + v*v, 0) * query.reduce((sum: number, v: number) => sum + v*v, 0));
+              if (!norm) return [];
+              const similarity = vector.reduce((sum, v, i) => sum + v*query[i], 0) / norm;
+              return similarity >= (args.similarity_threshold ?? 0) ? [{ ...c, similarity }] : [];
+            }).sort((a,b) => b.similarity-a.similarity).slice(0, matchCount),
             error: null
           };
         }

@@ -270,6 +270,8 @@ async function runAssistantPhase3Tests() {
   // 3. Grounded Concept Explanation & Source Citations
   // --------------------------------------------------------------------------
   console.log('\n3. Testing Grounded Concept Explanation & Source Citations...');
+  const originalKey = EmbeddingService.getApiKey;
+  EmbeddingService.getApiKey = () => null; // This suite tests deterministic fallback; provider success is covered separately.
   const originalEmbedText = EmbeddingService.embedText;
   EmbeddingService.embedText = async text => {
     const vector = new Array(EmbeddingService.DEFAULT_DIMENSION).fill(0);
@@ -415,6 +417,7 @@ async function runAssistantPhase3Tests() {
   }
 
   EmbeddingService.embedText = originalEmbedText;
+  EmbeddingService.getApiKey = originalKey;
 
   console.log(`\n====================================================`);
   console.log(`Assistant Phase 3 Verification: ${passed} passed, ${failed} failed.`);

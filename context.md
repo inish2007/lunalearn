@@ -195,4 +195,6 @@ Natural-language command design documented in docs/NATURAL-LANGUAGE-COMMANDS-PLA
 - Security & CORS: Permitted development loopback origins and added Next.js /api/:path* rewrite proxy, resolving browser "TypeError: Failed to fetch" errors.
 - Scoped preparation: Enhanced PlannerView to scope scheduled study blocks when navigated from exam preparation links with a clear filter action.
 - Verification: Frontend production build (18/18 static routes) and backend tests (12/12 suites) passed with 0 errors. Backend lint passed with 0 warnings.
+- Production CORS verification: Added automated test confirming production rejects loopback origins while allowing configured HTTPS production domains.
+- Boundary checks: Added automated tests for target_score bounds (0-100), exam title max length (200), task title max length (250), unicode/emoji titles, estimate positive bounds, and clean deletion of exams and tasks without orphans (31/31 passed in test-productivity-hardening.ts).
 

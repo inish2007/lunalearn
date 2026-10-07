@@ -22,9 +22,10 @@
     "test:assistant": "tsx src/scripts/test-assistant-phase3.ts",
     "test:quiz": "tsx src/scripts/test-quiz-phase4.ts",
     "test:reactive": "tsx src/scripts/test-real-data.ts",
-    "test": "tsx src/scripts/test-auth.ts && tsx src/scripts/test-crud.ts && tsx src/scripts/test-engine.ts && tsx src/scripts/test-planner.ts && tsx src/scripts/test-e2e-loop.ts && tsx src/scripts/test-rag-phase1.ts && tsx src/scripts/test-rag-phase2.ts && tsx src/scripts/test-assistant-phase3.ts && tsx src/scripts/test-quiz-phase4.ts && tsx src/scripts/test-real-data.ts && tsx src/scripts/test-productivity-hardening.ts && tsx src/scripts/test-security-hardening.ts",
+    "test": "tsx src/scripts/test-auth.ts && tsx src/scripts/test-crud.ts && tsx src/scripts/test-engine.ts && tsx src/scripts/test-planner.ts && tsx src/scripts/test-e2e-loop.ts && tsx src/scripts/test-rag-phase1.ts && tsx src/scripts/test-rag-phase2.ts && tsx src/scripts/test-assistant-phase3.ts && tsx src/scripts/test-quiz-phase4.ts && tsx src/scripts/test-real-data.ts && tsx src/scripts/test-productivity-hardening.ts && tsx src/scripts/test-security-hardening.ts && tsx src/scripts/test-auth-regression.ts",
     "test:productivity": "tsx src/scripts/test-productivity-hardening.ts",
-    "test:security": "tsx src/scripts/test-security-hardening.ts"
+    "test:security": "tsx src/scripts/test-security-hardening.ts",
+    "test:auth-regression": "tsx src/scripts/test-auth-regression.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.4",

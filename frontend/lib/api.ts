@@ -256,47 +256,52 @@ async function requestWithoutTimeout<T>(path: string, options: RequestOptions, i
   }
 
   // --------------------------------------------------------------------------
-  // Infinite 401 Loop Prevention:
-  // 401 -> refresh token once -> retry request once -> clean fail
+  // Infinite 401 Loop Prevention & Token Expiry Redirection:
+  // 401 -> refresh token once -> retry request once -> clean redirect to /login
   // --------------------------------------------------------------------------
-  if (res.status === 401 && !isRetry) {
-    const storedRefresh = getStoredRefreshToken();
-    if (storedRefresh && !isRefreshing) {
-      isRefreshing = true;
-      try {
-        const refreshRes = await fetch(`${API_BASE}/auth/refresh`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ refresh_token: storedRefresh }),
-          signal: options.signal
-        });
+  if (res.status === 401) {
+    if (!isRetry) {
+      const storedRefresh = getStoredRefreshToken();
+      if (storedRefresh && !isRefreshing) {
+        isRefreshing = true;
+        try {
+          const refreshRes = await fetch(`${API_BASE}/auth/refresh`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ refresh_token: storedRefresh }),
+            signal: options.signal
+          });
 
-        const refreshJson = await refreshRes.json().catch(err => {
+          const refreshJson = await refreshRes.json().catch(err => {
+            if (options.signal?.aborted) throw err;
+            return null;
+          });
+
+          if (refreshRes.ok && refreshJson?.success && refreshJson?.data?.session) {
+            const newAccessToken = refreshJson.data.session.access_token;
+            const newRefreshToken = refreshJson.data.session.refresh_token;
+
+            setStoredToken(newAccessToken);
+            if (newRefreshToken) setStoredRefreshToken(newRefreshToken);
+
+            isRefreshing = false;
+            // Retry the request ONCE with new access token
+            return request<T>(path, options, true);
+          }
+        } catch (err) {
           if (options.signal?.aborted) throw err;
-          return null;
-        });
-
-        if (refreshRes.ok && refreshJson?.success && refreshJson?.data?.session) {
-          const newAccessToken = refreshJson.data.session.access_token;
-          const newRefreshToken = refreshJson.data.session.refresh_token;
-
-          setStoredToken(newAccessToken);
-          if (newRefreshToken) setStoredRefreshToken(newRefreshToken);
-
+          // Refresh failed
+        } finally {
           isRefreshing = false;
-          // Retry the request ONCE with new access token
-          return request<T>(path, options, true);
         }
-      } catch (err) {
-        if (options.signal?.aborted) throw err;
-        // Refresh failed
-      } finally {
-        isRefreshing = false;
       }
     }
 
-    // Refresh was not possible or failed: clean wipe of auth credentials
+    // Refresh was not possible or failed: clean wipe of auth credentials & clean redirect
     clearStoredAuth();
+    if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
+      window.location.href = '/login';
+    }
   }
 
   // Parse JSON response body
@@ -307,9 +312,11 @@ async function requestWithoutTimeout<T>(path: string, options: RequestOptions, i
 
   if (!res.ok || (json && json.success === false)) {
     const errorObj = json?.error;
-    const errorCode = typeof errorObj === 'object' ? errorObj.code : (errorObj || 'API_ERROR');
+    const errorCode = typeof errorObj === 'object' ? errorObj.code : (errorObj || (res.status === 401 ? 'UNAUTHORIZED' : 'API_ERROR'));
     const errorMessage = typeof errorObj === 'object' ? errorObj.message : (json?.message || `HTTP ${res.status}`);
-    const userMessage = typeof errorObj === 'object' ? errorObj.userMessage : errorMessage;
+    const userMessage = res.status === 401
+      ? 'Your session has expired. Redirecting to login…'
+      : (typeof errorObj === 'object' ? errorObj.userMessage : errorMessage);
     const retryable = typeof errorObj === 'object' ? Boolean(errorObj.retryable) : res.status >= 500;
     const requestId = typeof errorObj === 'object' ? errorObj.requestId : res.headers.get('x-request-id') || undefined;
     const issues = typeof errorObj === 'object' ? errorObj.issues : json?.issues;

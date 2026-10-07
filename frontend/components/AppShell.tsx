@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import { useAcademic } from '@/lib/context/AcademicContext';
 import { ThemeToggle } from '@/components/ThemeToggle';
+import { getStoredToken } from '@/lib/api';
 
 const primary = [
   ['Dashboard', '/dashboard', LayoutDashboard],
@@ -49,7 +50,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const path = usePathname();
   const router = useRouter();
   const [open, setOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const { profile, logout, risks } = useAcademic();
+
+  useEffect(() => {
+    setMounted(true);
+    if (!getStoredToken()) {
+      router.replace('/login');
+    }
+  }, [router]);
 
   useEffect(() => {
     const spark = (event: MouseEvent) => {
@@ -109,6 +118,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <span>{label}</span>
       </Link>
     ));
+
+  if (mounted && !getStoredToken()) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-canvas text-ink">
+        <div className="text-center space-y-3">
+          <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent mx-auto" />
+          <p className="text-sm text-muted">Redirecting to login…</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="relative min-h-screen bg-canvas text-ink transition-colors duration-300">

@@ -53,8 +53,7 @@ export class Logger {
         if (fields.error instanceof Error) {
           entry.error = {
             name: fields.error.name,
-            message: process.env.NODE_ENV === 'production' ? 'Operation failed' : fields.error.message,
-            stack: process.env.NODE_ENV === 'production' ? undefined : fields.error.stack
+            message: process.env.NODE_ENV === 'production' ? 'Operation failed' : fields.error.message
           };
         } else {
           entry.error = String(fields.error);

@@ -193,7 +193,8 @@ function Learning() {
       setSubName('');
       setSubCode('');
       setShowSubjectModal(false);
-    } catch (err) {
+    } catch (err: any) {
+      if (err?.status === 401 || err?.code === 'UNAUTHORIZED') return;
       console.error('Failed to create subject:', err);
     }
   };

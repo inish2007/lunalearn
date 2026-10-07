@@ -198,3 +198,28 @@ Natural-language command design documented in docs/NATURAL-LANGUAGE-COMMANDS-PLA
 - Production CORS verification: Added automated test confirming production rejects loopback origins while allowing configured HTTPS production domains.
 - Boundary checks: Added automated tests for target_score bounds (0-100), exam title max length (200), task title max length (250), unicode/emoji titles, estimate positive bounds, and clean deletion of exams and tasks without orphans (31/31 passed in test-productivity-hardening.ts).
 
+## Production Readiness & Auth Hardening — 2026-10-07 (cluster 3)
+- **Auth Bug Root Cause & Resolution**:
+  - Issue: `ClientAppError "Missing or malformed Authorization header. Please provide a valid Bearer token."` (`lib/api.ts:317 requestWithoutTimeout -> AcademicContext.tsx:370 createSubject -> Workspace.tsx:187 handleAddSubject`).
+  - Cause: Unauthenticated/expired visitors had no route guard in `AppShell`; when `getStoredToken()` was null, requests were sent without `Authorization` header, returning 401; `api.ts` cleared credentials but threw raw `ClientAppError` without redirecting.
+  - Fix: Added route guard in `frontend/components/AppShell.tsx` to redirect unauthenticated visitors to `/login` with a clean loading spinner; updated `frontend/lib/api.ts` to refresh expired tokens once or cleanly redirect to `/login` (`window.location.href = '/login'`) with user-friendly session expiration message; suppressed raw 401 logging in `Workspace.tsx`.
+  - Verification: Added `backend/src/scripts/test-auth-regression.ts` verifying clean 401s, signup, reload persistence, and all 7 authenticated endpoints (subjects, tasks, exams, materials, quiz, assistant, settings) (13/13 passed).
+- **Two-User Isolation & RLS**:
+  - Added `backend/src/scripts/test-two-user-rls.ts` validating complete cross-tenant boundary isolation across tasks, exams, materials, quiz submissions, and PDF downloads (22/22 passed).
+- **Security & Logging**:
+  - Removed stack trace emissions from structured logger (`backend/src/lib/logger.ts`) ensuring zero stack traces or secrets leaked in logs or API responses.
+- **Frontend Code Quality & Lint**:
+  - Installed `eslint` and `eslint-config-next`; created `frontend/.eslintrc.json`; resolved `useCallback` dependency warning in `AcademicContext.tsx`. `npm run lint` in frontend exits 0 with 0 warnings/errors.
+  - Production build: `npm run build` compiled and prerendered 18/18 static routes with 0 errors.
+
+## Production Readiness Checklist (A-H)
+- **A. Auth**: **PASS** — Bug fixed and verified with regression suite `test-auth-regression.ts` (13/13 passed); unauthenticated requests return clean 401; UI redirects to `/login` on expiry without raw errors; all 7 authenticated endpoints verified after login, reload, and refresh.
+- **B. Tasks/Exams**: **PASS** — Verified with `test-productivity-hardening.ts` (31/31 passed) and `test-two-user-rls.ts` (22/22 passed): completion reversal (XP awarded only once), cascade delete of linked records, input bounds (target_score 0-100, task title max 250, exam title max 200, positive estimates, emoji titles), atomic conditional updates, and stale-state reload controls.
+- **C. Security**: **PASS** — Verified with `test-security-hardening.ts` (7/7 passed): production rejects loopback CORS origins; ownership checks on all endpoints (403/404); zero stack traces or secrets in responses or logs.
+- **D. Ops**: **PASS** — Verified `/health` and `/api/health` endpoints; graceful shutdown with connection draining (SIGTERM/SIGINT); fail-fast production config validation in `env.ts`; complete `.env.example` across backend & frontend; error boundary at `frontend/app/error.tsx`; no inert controls or unlabeled demo mocks.
+- **E. Quality Gates**: **PASS** — Backend `tsc --noEmit` (0 errors), backend `npm run lint` (0 warnings), backend `npm test` (13 test suites passed: 13/13); frontend `npm run lint` (0 errors/warnings), frontend `npm run build` (18/18 static routes compiled).
+- **F. Dependencies**: **PASS** — Backend: 0 vulnerabilities. Frontend: 9 vulnerabilities (2 moderate, 7 high) in build-time dev tooling only (`tailwindcss` v3, `chokidar`, `braces`, `@next/eslint-plugin-next`); 0 runtime vulnerabilities.
+- **G. Docs**: **PASS** — `README.md` documents setup, env vars, migrations, tests, and deployment checklist.
+- **H. Migrations**: **BLOCKED: needs human** — Statically reviewed 5 migrations from `20261006` and 1 migration from `20261007` (all additive, idempotent, and secure). Staging Supabase project credentials in `.env` are placeholders (`placeholder-anon-key`, `placeholder-service-key`), requiring human operator to supply staging keys or run `supabase db push`.
+
+

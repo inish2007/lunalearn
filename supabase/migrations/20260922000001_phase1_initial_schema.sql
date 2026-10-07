@@ -293,7 +293,7 @@ TO authenticated
 USING (auth.uid() = profile_id)
 WITH CHECK (auth.uid() = profile_id);
 
--- UNITS POLICIES (Scaped via owning subject)
+-- UNITS POLICIES (Scoped via owning subject)
 CREATE POLICY "Users can manage units of their subjects"
 ON units FOR ALL
 TO authenticated

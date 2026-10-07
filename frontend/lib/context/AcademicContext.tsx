@@ -142,6 +142,25 @@ export function AcademicProvider({ children }: { children: React.ReactNode }) {
     setProfile(p);
   }, []);
 
+  const loadUnitsAndTopics = useCallback(async (subjectId: string) => {
+    try {
+      const unitList = await api.units.list(subjectId);
+      setUnits(prev => ({ ...prev, [subjectId]: unitList || [] }));
+
+      // Load topics for each unit
+      if (unitList && unitList.length > 0) {
+        for (const u of unitList) {
+          const topicList = await api.topics.list(u.id);
+          setTopics(prev => ({ ...prev, [u.id]: topicList || [] }));
+        }
+      }
+    } catch (err) {
+      const error = err instanceof ClientAppError ? err : new ClientAppError({code: 'FETCH_ERROR', message: 'Syllabus could not be loaded. Please retry.', retryable: true});
+      setAppError(error);
+      setAsyncState(prev => ({ ...prev, status: 'error', error }));
+    }
+  }, []);
+
   // Fetch all domain data if authenticated
   const refreshAll = useCallback(async () => {
     const currentToken = getStoredToken();
@@ -268,7 +287,7 @@ export function AcademicProvider({ children }: { children: React.ReactNode }) {
         error: clientErr
       }));
     }
-  }, []);
+  }, [loadUnitsAndTopics]);
 
   useEffect(() => {
     const refresh = () => { if (document.visibilityState === 'visible' && getStoredToken()) void refreshAll(); };
@@ -276,25 +295,6 @@ export function AcademicProvider({ children }: { children: React.ReactNode }) {
     const timer = window.setInterval(refresh, 60000);
     return () => { window.removeEventListener('focus', refresh); window.clearInterval(timer); };
   }, [refreshAll]);
-
-  const loadUnitsAndTopics = useCallback(async (subjectId: string) => {
-    try {
-      const unitList = await api.units.list(subjectId);
-      setUnits(prev => ({ ...prev, [subjectId]: unitList || [] }));
-
-      // Load topics for each unit
-      if (unitList && unitList.length > 0) {
-        for (const u of unitList) {
-          const topicList = await api.topics.list(u.id);
-          setTopics(prev => ({ ...prev, [u.id]: topicList || [] }));
-        }
-      }
-    } catch (err) {
-      const error = err instanceof ClientAppError ? err : new ClientAppError({code: 'FETCH_ERROR', message: 'Syllabus could not be loaded. Please retry.', retryable: true});
-      setAppError(error);
-      setAsyncState(prev => ({ ...prev, status: 'error', error }));
-    }
-  }, []);
 
   // Initial load
   useEffect(() => {

@@ -108,8 +108,17 @@ export class LocalDevStore {
       const dir = path.dirname(this.storageFilePath);
       if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
       const temporary = this.storageFilePath + '.tmp';
-      fs.writeFileSync(temporary, JSON.stringify(stateToSave, null, 2), 'utf8');
-      fs.renameSync(temporary, this.storageFilePath);
+      try {
+        fs.writeFileSync(temporary, JSON.stringify(stateToSave, null, 2), 'utf8');
+        fs.renameSync(temporary, this.storageFilePath);
+      } catch (renameErr: any) {
+        if (renameErr?.code === 'EBUSY' || renameErr?.code === 'EPERM') {
+          fs.writeFileSync(this.storageFilePath, JSON.stringify(stateToSave, null, 2), 'utf8');
+          try { fs.unlinkSync(temporary); } catch {}
+        } else {
+          throw renameErr;
+        }
+      }
     } catch (err) {
       throw err;
     }

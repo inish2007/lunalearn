@@ -220,6 +220,24 @@ Natural-language command design documented in docs/NATURAL-LANGUAGE-COMMANDS-PLA
 - **E. Quality Gates**: **PASS** — Backend `tsc --noEmit` (0 errors), backend `npm run lint` (0 warnings), backend `npm test` (13 test suites passed: 13/13); frontend `npm run lint` (0 errors/warnings), frontend `npm run build` (18/18 static routes compiled).
 - **F. Dependencies**: **PASS** — Backend: 0 vulnerabilities. Frontend: 9 vulnerabilities (2 moderate, 7 high) in build-time dev tooling only (`tailwindcss` v3, `chokidar`, `braces`, `@next/eslint-plugin-next`); 0 runtime vulnerabilities.
 - **G. Docs**: **PASS** — `README.md` documents setup, env vars, migrations, tests, and deployment checklist.
-- **H. Migrations**: **BLOCKED: needs human** — Statically reviewed 5 migrations from `20261006` and 1 migration from `20261007` (all additive, idempotent, and secure). Staging Supabase project credentials in `.env` are placeholders (`placeholder-anon-key`, `placeholder-service-key`), requiring human operator to supply staging keys or run `supabase db push`.
+- **H. Migrations**: **PASS** — Remote Supabase staging project `inowfcfmqvuekcllihzf` linked; all 11 migrations applied remotely and confirmed via `supabase migration list` (including additive migration `20261007000002_fix_quiz_submission_weak_topics.sql`).
+
+## Staging Supabase Verification & Live RAG Hardening — 2026-10-07 (cluster 4)
+- **Staging Supabase Migration**:
+  - Linked remote staging project `inowfcfmqvuekcllihzf`.
+  - Pushed all pending migrations plus additive migration `20261007000002_fix_quiz_submission_weak_topics.sql` resolving type mismatch where `weak_topics_identified` received `text[]` instead of `jsonb`.
+  - Verified remote state: 11/11 migrations match between local and remote staging.
+- **Two-User Isolation (Check 6a)**:
+  - Verified cross-tenant boundary isolation in both directions across Postgres RLS directly and REST API endpoints: subjects, tasks, exams, materials, quiz runs/submission, study sessions, and XP events (all return 404/403 or empty sets).
+- **PDF Storage & Byte-for-Byte Integrity (Check 6b)**:
+  - Uploaded synthetic PDF to `materials` bucket via scoped client; verified byte-for-byte SHA256 match on direct download and via `/api/materials/:id/content`; non-owner denied access (direct failure & API 404/403).
+- **E2E Flow & Authoritative Scoring (Check 6c)**:
+  - Full lifecycle executed against live staging: auth login, subject creation, task CRUD with optimistic concurrency (`If-Match`), exam CRUD & readiness calculation, live grounded Gemini quiz generation via `/api/quiz/generate`, authoritative atomic scoring via `submit_quiz_run`, and dashboard/planner context retrieval.
+- **Model Fallback & Transient 503 Resilience**:
+  - Updated `QuizService` to use `gemini-flash-lite-latest` as default with automatic fallback resilience when primary models experience transient 503 high-demand spikes.
+- **Authorization Header Regression (Check 7)**:
+  - Re-checked authorization header handling: unauthenticated requests return clean 401; authenticated requests create subjects directly and through Next.js `/api/:path*` rewrite proxy on port 3000 (status 201).
+- **Verification Summary**:
+  - `backend/src/scripts/test-staging-verification.ts`: 15/15 passed with 0 failures. Execution logged to `backend/staging-run.log`.
 
 

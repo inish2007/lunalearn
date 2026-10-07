@@ -18,8 +18,8 @@ async function quizStore(db:any):Promise<any> {
  return (await import('../lib/supabase.js')).supabaseAdmin;
 }
 export class QuizService {
- static readonly DEFAULT_MODEL = 'gemini-flash-latest';
- static readonly FALLBACK_MODEL = 'gemini-flash-latest';
+ static readonly DEFAULT_MODEL = 'gemini-flash-lite-latest';
+ static readonly FALLBACK_MODEL = 'gemini-flash-lite-latest';
  static getModelName() { return env.GEMINI_CHAT_MODEL || this.DEFAULT_MODEL; }
  static isAnswerCorrect(a:string,b:string) { return answerMatches(a,b); }
  static async generateQuiz(db: SupabaseClient<Database>, profileId: string, input: GenerateQuizInput): Promise<GenerateQuizResponseData> {
@@ -62,7 +62,12 @@ export class QuizService {
   let questions: QuizQuestion[] = [];
   for (let attempt=0;attempt<2;attempt++) {
    const raw = await geminiCircuitBreaker.execute(()=>retryWithBackoff(async()=>{
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({contents:[{role:'user',parts:[{text:prompt+(attempt?' Previous output failed validation; provide a complete new valid set.':'')}]}],generationConfig:{temperature:.8,maxOutputTokens:8192,responseMimeType:'application/json'}}),signal:AbortSignal.timeout(20000)});
+    let targetModel = model;
+    let response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${targetModel}:generateContent?key=${key}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({contents:[{role:'user',parts:[{text:prompt+(attempt?' Previous output failed validation; provide a complete new valid set.':'')}]}],generationConfig:{temperature:.8,maxOutputTokens:8192,responseMimeType:'application/json'}}),signal:AbortSignal.timeout(20000)});
+    if (!response.ok && (response.status === 503 || response.status === 404) && targetModel !== QuizService.FALLBACK_MODEL) {
+      targetModel = QuizService.FALLBACK_MODEL;
+      response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${targetModel}:generateContent?key=${key}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({contents:[{role:'user',parts:[{text:prompt+(attempt?' Previous output failed validation; provide a complete new valid set.':'')}]}],generationConfig:{temperature:.8,maxOutputTokens:8192,responseMimeType:'application/json'}}),signal:AbortSignal.timeout(20000)});
+    }
     if (!response.ok) { const err = new Error(`Gemini could not generate a quiz (HTTP ${response.status}). Please retry.`) as any; err.status=response.status; throw err; }
     const data:any=await response.json(); return data.candidates?.[0]?.content?.parts?.map((p:any)=>p.text || '').join('') || '';
    },{maxRetries:1,initialDelayMs:500}));

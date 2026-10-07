@@ -94,6 +94,14 @@ graph TD
 - Hard-refreshing the browser (`Ctrl+F5` or `Cmd+Shift+R`) loads the newly compiled dev modules immediately.
 - If necessary, clearing `.next/` (`rm -rf .next` or `Remove-Item -Recurse -Force .next`) resets all cached chunks.
 
+### CORS & Loopback "Failed to Fetch" Resolution
+- **Issue:** Frontend opened on `http://127.0.0.1:3000` or alternate dev ports was blocked by the backend CORS validator, triggering browser `TypeError: Failed to fetch`.
+- **Resolution:**
+  - `backend/src/index.ts`: Enabled automatic approval for all loopback origins (`localhost`, `127.0.0.1`, `::1` across any port) in development mode.
+  - `backend/src/config/env.ts` & `backend/.env`: Expanded default `CORS_ORIGINS` to include `127.0.0.1:3000` and ports `3001`.
+  - `frontend/next.config.mjs`: Added API rewrite proxy (`/api/:path*` -> `http://localhost:4000/api/:path*`) providing seamless same-origin fallback.
+  - `frontend/.env.local`: Explicitly set `NEXT_PUBLIC_API_URL=http://localhost:4000/api`.
+
 ---
 
 ## 6. Verification & Audit History
@@ -180,3 +188,11 @@ Natural-language command design documented in docs/NATURAL-LANGUAGE-COMMANDS-PLA
 - Browser reproduced missing Escape/focus handling. Native modal now traps focus, restores it, disables pending fields, supports Escape, wraps long titles, and provides clear-filter and conflict-reload controls. Two-tab stale edit visibly returned conflict; reload restored the second tab's saved title. Script-like title rendered as literal text.
 - Verification: new disposable HTTP/schema/store suite 23 passed / 0 failed; backend and frontend TypeScript checks passed. Browser create, pending fields, Escape, two-tab conflict/recovery passed. Broad production regression and remaining date/mobile coverage pending next cluster.
 - Contract: optional UUID `id` on task/exam POST. Existing callers remain supported; callers requiring retry idempotency must reuse the same ID/payload. Same replay 200; initial create 201; differing replay 409. No schema migration required (existing primary key). Live Postgres race validation remains pending.
+
+## Tasks/Exams hardening & production readiness — 2026-10-07 (cluster 2)
+- Dates: DST-gap rejection in fromLocalInput prevents silent rescheduling of tasks/exams across daylight saving transitions (16 passed in test-dates.ts).
+- Dependencies: Overrode postcss (8.5.29) and braces (3.0.3) in frontend package.json to resolve vulnerabilities without breaking major bumps to Tailwind 4.
+- Security & CORS: Permitted development loopback origins and added Next.js /api/:path* rewrite proxy, resolving browser "TypeError: Failed to fetch" errors.
+- Scoped preparation: Enhanced PlannerView to scope scheduled study blocks when navigated from exam preparation links with a clear filter action.
+- Verification: Frontend production build (18/18 static routes) and backend tests (12/12 suites) passed with 0 errors. Backend lint passed with 0 warnings.
+

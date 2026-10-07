@@ -4,7 +4,7 @@ import assert from 'assert/strict';
 import fs from 'fs';
 import path from 'path';
 import { env } from '../config/env.js';
-import type { Database } from '../types/database.types.js';
+import type { Database } from '../types/database.js';
 
 interface CheckResult {
   name: string;
@@ -112,7 +112,7 @@ async function main() {
     throw new Error('SUPABASE_SERVICE_ROLE_KEY is missing or placeholder.');
   }
 
-  const adminClient = createClient<Database>(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, {
+  const adminClient: any = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, {
     auth: { persistSession: false, autoRefreshToken: false }
   });
 
@@ -194,7 +194,7 @@ async function main() {
     // -------------------------------------------------------------
     await runCheck('Setup test User A and User B on staging Supabase Auth', async () => {
       // User A
-      const { data: authA, error: errA } = await withTimeout(
+      const { data: authA, error: errA } = await withTimeout<any>(
         adminClient.auth.admin.createUser({
           email: userAEmail,
           password,
@@ -206,7 +206,7 @@ async function main() {
       userAId = authA.user.id;
 
       // User B
-      const { data: authB, error: errB } = await withTimeout(
+      const { data: authB, error: errB } = await withTimeout<any>(
         adminClient.auth.admin.createUser({
           email: userBEmail,
           password,
@@ -711,7 +711,7 @@ async function main() {
 
       // Mark materialA processed = true and insert document chunk
       await adminClient.from('materials').update({ processed: true }).eq('id', materialAId);
-      const { data: chunk, error: cErr } = await adminClient
+      const { error: cErr } = await adminClient
         .from('document_chunks')
         .insert({
           material_id: materialAId,

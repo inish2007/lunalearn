@@ -51,6 +51,22 @@ export * from './routes/quiz.routes.js';
 
 const PORT = parseInt(env.PORT, 10);
 
+export function isOriginAllowed(candOrigin: string | undefined, allowedOrigins: string[], isDev: boolean): boolean {
+  if (!candOrigin) return true;
+  if (allowedOrigins.includes(candOrigin)) return true;
+  if (isDev) {
+    try {
+      const u = new URL(candOrigin);
+      if (u.hostname === 'localhost' || u.hostname === '127.0.0.1' || u.hostname === '::1' || u.hostname === '[::1]') {
+        return true;
+      }
+    } catch {
+      return false;
+    }
+  }
+  return false;
+}
+
 export const server = http.createServer(async (req, res) => {
   const startTime = Date.now();
   const requestId = getOrCreateRequestId(req);
@@ -62,26 +78,10 @@ export const server = http.createServer(async (req, res) => {
     const origins = (env.CORS_ORIGINS || '').split(',').map(value => value.trim()).filter(Boolean);
     const isDev = env.NODE_ENV !== 'production';
 
-    const isOriginAllowed = (candOrigin?: string): boolean => {
-      if (!candOrigin) return true;
-      if (origins.includes(candOrigin)) return true;
-      if (isDev) {
-        try {
-          const u = new URL(candOrigin);
-          if (u.hostname === 'localhost' || u.hostname === '127.0.0.1' || u.hostname === '::1' || u.hostname === '[::1]') {
-            return true;
-          }
-        } catch {
-          return false;
-        }
-      }
-      return false;
-    };
-
     res.setHeader('Vary', 'Origin');
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Cache-Control', 'no-store');
-    if (origin && !isOriginAllowed(origin)) {
+    if (origin && !isOriginAllowed(origin, origins, isDev)) {
       sendStandardError(res, AppError.forbidden('Origin is not allowed'), requestId);
       return;
     }

@@ -8,3 +8,10 @@ export function examCountdown(value: string, now = new Date()): string {
  return days===0 ? 'Today' : days===1 ? 'Tomorrow' : `${days} days remaining`;
 }
 export function toLocalInput(value: string) { const d=new Date(value); return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,16); }
+
+/** Reject invalid calendar dates and DST gaps instead of silently rescheduling. */
+export function fromLocalInput(value: string): string {
+ const date=new Date(value);
+ if (!Number.isFinite(date.getTime()) || toLocalInput(date.toISOString())!==value) throw new Error('This local time does not exist. Choose a valid date and time.');
+ return date.toISOString();
+}

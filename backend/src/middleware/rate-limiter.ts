@@ -67,7 +67,7 @@ export const rateLimiter = new RateLimiter();
 
 // Endpoint rate limit configurations
 const ROUTE_LIMITS: { pattern: RegExp; config: RateLimitConfig }[] = [
-  { pattern: /^\/api\/auth\/(login|signup)$/, config: { windowMs: 60000, maxRequests: 15 } },
+  { pattern: /^\/api\/auth\/(login|signup|refresh)$/, config: { windowMs: 60000, maxRequests: 15 } },
   { pattern: /^\/api\/assistant\/chat$/, config: { windowMs: 60000, maxRequests: 30 } },
   { pattern: /^\/api\/quiz\/generate$/, config: { windowMs: 60000, maxRequests: 20 } },
   { pattern: /^\/api\/rag\/upload$/, config: { windowMs: 60000, maxRequests: 15 } }
@@ -79,10 +79,10 @@ export function applyRateLimiter(req: http.IncomingMessage, res: http.ServerResp
 
   for (const route of ROUTE_LIMITS) {
     if (route.pattern.test(pathname)) {
-      // Key on IP or Authorization token
-      const clientIp = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.socket.remoteAddress || 'unknown-ip';
-      const authHeader = req.headers['authorization'] || '';
-      const key = `${pathname}:${authHeader ? authHeader.slice(-16) : clientIp}`;
+      // Unverified headers/tokens are attacker controlled. Deploy behind a
+      // connection-preserving proxy or apply additional shared edge limits.
+      const clientIp = req.socket.remoteAddress || 'unknown-ip';
+      const key = `${pathname}:${clientIp}`;
 
       const { allowed, remaining, retryAfterSec } = rateLimiter.checkLimit(key, route.config);
 

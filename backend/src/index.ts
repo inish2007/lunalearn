@@ -58,7 +58,13 @@ export const server = http.createServer(async (req, res) => {
 
   try {
     // Global CORS headers
-    res.setHeader('Access-Control-Allow-Origin', '*');
+    const origin=req.headers.origin;
+    const origins=(env.CORS_ORIGINS || '').split(',').map(value=>value.trim());
+    res.setHeader('Vary', 'Origin');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Cache-Control', 'no-store');
+    if(origin && !origins.includes(origin)) { sendStandardError(res, AppError.forbidden('Origin is not allowed'), requestId); return; }
+    if(origin)res.setHeader('Access-Control-Allow-Origin',origin);
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Idempotency-Key, If-Match, X-Request-Id');
     res.setHeader('Access-Control-Expose-Headers', 'X-Request-Id, X-RateLimit-Limit, X-RateLimit-Remaining, Retry-After, ETag, Idempotency-Key');
@@ -274,7 +280,7 @@ export const server = http.createServer(async (req, res) => {
     logger.debug(`Request completed`, {
       requestId,
       method: req.method,
-      path: req.url,
+      path: req.url?.split('?')[0],
       latencyMs
     });
   }
@@ -289,7 +295,18 @@ server.on('error', (err: NodeJS.ErrnoException) => {
   }
 });
 
+server.requestTimeout = 120000;
+server.headersTimeout = 15000;
+server.keepAliveTimeout = 5000;
 if (process.env.NODE_ENV !== 'test') {
+  const shutdown = () => {
+    logger.info('Shutdown requested');
+    server.close(() => process.exit(0));
+    server.closeIdleConnections();
+    setTimeout(() => { server.closeAllConnections(); process.exit(1); }, 15000).unref();
+  };
+  process.once('SIGTERM', shutdown);
+  process.once('SIGINT', shutdown);
   server.listen(PORT, () => {
     console.log('====================================================');
     console.log(`🌙 LunaLearn Backend running on http://localhost:${PORT}`);

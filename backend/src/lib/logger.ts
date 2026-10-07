@@ -24,7 +24,7 @@ export interface LogFields {
  */
 export function getSafeUserId(userId?: string | null): string {
   if (!userId) return 'anonymous';
-  if (userId.length <= 8) return userId;
+  
   // Anonymized deterministic hash prefix
   const hash = crypto.createHash('sha256').update(userId).digest('hex').substring(0, 10);
   return `usr_${hash}`;
@@ -46,14 +46,14 @@ export class Logger {
       if (fields.provider) entry.provider = fields.provider;
       if (typeof fields.latencyMs === 'number') entry.latencyMs = fields.latencyMs;
       if (fields.method) entry.method = fields.method;
-      if (fields.path) entry.path = fields.path;
+      if (fields.path) entry.path = fields.path.split('?')[0];
       if (fields.statusCode) entry.statusCode = fields.statusCode;
 
       if (fields.error) {
         if (fields.error instanceof Error) {
           entry.error = {
             name: fields.error.name,
-            message: fields.error.message,
+            message: process.env.NODE_ENV === 'production' ? 'Operation failed' : fields.error.message,
             stack: process.env.NODE_ENV === 'production' ? undefined : fields.error.stack
           };
         } else {
@@ -61,11 +61,9 @@ export class Logger {
         }
       }
 
-      // Remaining custom fields
-      for (const [k, v] of Object.entries(fields)) {
-        if (!(k in entry) && k !== 'userId') {
-          entry[k] = v;
-        }
+      // Allow only operational metadata, never arbitrary request payloads.
+      for (const key of ['errorCode', 'attempt', 'maxRetries', 'retryAfterSec']) {
+        if (fields[key] !== undefined) entry[key] = fields[key];
       }
     }
 

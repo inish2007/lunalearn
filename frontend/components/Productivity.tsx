@@ -3,7 +3,7 @@ import { useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
 import { api, ClientAppError } from '@/lib/api';
 import { useAcademic } from '@/lib/context/AcademicContext';
-import { examCountdown, toLocalInput } from '@/lib/dates';
+import { examCountdown, toLocalInput, fromLocalInput } from '@/lib/dates';
 import { Card, PageHeader } from './Ui';
 import { ReadinessDetails } from './ReadinessDetails';
 import type { Task, Exam } from '@/lib/types/academic';
@@ -33,8 +33,8 @@ export function Productivity({kind}:{kind:'tasks'|'exams'}) {
  async function save(e:React.FormEvent) {
   e.preventDefault();
   const ok=await mutate(async()=>{
-   if(kind==='tasks') {const payload={title:title.trim(),estimated_minutes:estimate?Number(estimate):null,subject_id:formSubject || null,priority:formPriority,type:formType,due_date:date?new Date(date).toISOString():null};if(editing) await api.tasks.update(editing.id,payload,editing.updated_at);else await api.tasks.create({...payload,id:creationId.current});}
-   else { const timestamp=new Date(date).toISOString(); if(editing && 'exam_date' in editing) await api.exams.update(editing.id,{title,target_score:target,...(timestamp!==editing.exam_date && toLocalInput(timestamp)!==toLocalInput(editing.exam_date)?{exam_date:timestamp}:{})},editing.updated_at);else await api.exams.create({id:creationId.current,title:title.trim(),subject_id:formSubject,exam_date:timestamp,target_score:target}); }
+   if(kind==='tasks') {const payload={title:title.trim(),estimated_minutes:estimate?Number(estimate):null,subject_id:formSubject || null,priority:formPriority,type:formType,due_date:date?fromLocalInput(date):null};if(editing) await api.tasks.update(editing.id,payload,editing.updated_at);else await api.tasks.create({...payload,id:creationId.current});}
+   else { const timestamp=fromLocalInput(date); if(editing && 'exam_date' in editing) await api.exams.update(editing.id,{title,target_score:target,...(timestamp!==editing.exam_date && toLocalInput(timestamp)!==toLocalInput(editing.exam_date)?{exam_date:timestamp}:{})},editing.updated_at);else await api.exams.create({id:creationId.current,title:title.trim(),subject_id:formSubject,exam_date:timestamp,target_score:target}); }
   });if(ok)setOpen(false);
  }
  const filtered=(kind==='tasks'?tasks:exams).filter(item=>{

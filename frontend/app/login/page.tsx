@@ -11,8 +11,7 @@ import {
   Upload,
   Plus,
   Loader2,
-  BookOpen,
-  GraduationCap
+  BookOpen
 } from 'lucide-react';
 import { useAcademic } from '@/lib/context/AcademicContext';
 
@@ -81,33 +80,6 @@ export default function LoginPage() {
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Authentication failed';
       setAuthError(msg);
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  // Quick Demo Login Handler
-  const handleDemoLogin = async () => {
-    setAuthError(null);
-    setSubmitting(true);
-    try {
-      // Attempt login with seeded demo account or default
-      await login('aarav.patel@example.com', 'password123');
-      router.push('/dashboard');
-    } catch (_err) {
-      // If demo user isn't created in Supabase yet, sign them up
-      try {
-        await signup({
-          email: 'aarav.patel@example.com',
-          password: 'password123',
-          full_name: 'Aarav Patel',
-          course: 'Computer Science & Engineering',
-          semester: 4
-        });
-        router.push('/dashboard');
-      } catch (e: unknown) {
-        setAuthError(e instanceof Error ? e.message : 'Could not log in to demo account');
-      }
     } finally {
       setSubmitting(false);
     }
@@ -578,22 +550,7 @@ export default function LoginPage() {
                 {!submitting && <ArrowRight size={17} />}
               </button>
 
-              <div className="relative py-2 text-center text-xs text-muted">
-                <span className="bg-white px-2">or quick start with demo</span>
-                <div className="absolute inset-0 flex items-center -z-10">
-                  <div className="w-full border-t border-highlight/60" />
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={handleDemoLogin}
-                disabled={submitting}
-                className="flex w-full items-center justify-center gap-2 rounded-xl border border-highlight bg-canvas px-4 py-3 text-xs font-bold text-deep hover:bg-highlight/30 transition disabled:opacity-50"
-              >
-                <GraduationCap size={16} className="text-primary" />
-                Open Demo Student (Aarav Patel · DBMS)
-              </button>
+              {process.env.NODE_ENV === 'development' && <p className="text-center text-xs text-muted">Demo mode: seed the local DBMS dataset, then sign in with your configured demo credentials.</p>}
 
               <p className="text-center text-xs text-muted pt-2">
                 {isSignUp ? 'Already have an account?' : "Don't have an account yet?"}{' '}

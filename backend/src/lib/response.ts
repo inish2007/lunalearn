@@ -89,11 +89,11 @@ export function sendStandardError(
 
   appError.requestId = reqId;
   const statusCode = extra?.statusCodeOverride || appError.statusCode;
-  const safeMessage = sanitizeErrorMessage(appError.message);
+  const safeMessage = statusCode >= 500 ? 'An internal error occurred. Please retry.' : sanitizeErrorMessage(appError.message);
   const safeUserMessage = sanitizeErrorMessage(appError.userMessage);
 
   // Structured Logging of error (full diagnostic retained on server)
-  logger.error(safeMessage, {
+  logger.error('Request failed', {
     requestId: reqId,
     statusCode,
     errorCode: appError.code,

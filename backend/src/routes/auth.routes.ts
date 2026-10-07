@@ -7,25 +7,24 @@ import { sendStandardSuccess, sendStandardError, getOrCreateRequestId } from '..
 
 export async function parseJsonBody<T = unknown>(req: http.IncomingMessage): Promise<T> {
   return new Promise((resolve, reject) => {
-    let body = '';
-    req.on('data', (chunk) => {
-      body += chunk.toString();
-      // Guard against huge payload attacks (> 1MB)
-      if (body.length > 1048576) {
-        reject(AppError.payloadTooLarge('Payload too large: request body exceeds 1MB'));
+    const chunks: Buffer[] = [];
+    let bytes = 0, rejected = false;
+    req.on('data', (chunk: Buffer) => {
+      if (rejected) return;
+      bytes += chunk.length;
+      if (bytes > 1048576) {
+        rejected = true; chunks.length = 0;
+        reject(AppError.payloadTooLarge('Request body exceeds 1MB'));
+        return;
       }
+      chunks.push(chunk);
     });
+    req.on('aborted', () => reject(AppError.validation('Request interrupted')));
     req.on('end', () => {
-      try {
-        if (!body.trim()) {
-          resolve({} as T);
-          return;
-        }
-        resolve(JSON.parse(body) as T);
-      } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : 'Invalid JSON format';
-        reject(AppError.validation(message));
-      }
+      if (rejected) return;
+      const body = Buffer.concat(chunks).toString('utf8');
+      try { resolve((body.trim() ? JSON.parse(body) : {}) as T); }
+      catch { reject(AppError.validation('Invalid JSON body')); }
     });
     req.on('error', (err) => reject(err));
   });

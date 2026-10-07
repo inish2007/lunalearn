@@ -184,7 +184,8 @@ export async function handleDomainRoutes(req: http.IncomingMessage, res: http.Se
         try {
           body = await parseJsonBody(req);
         } catch (err: unknown) {
-          return sendError(res, 'ValidationError', err instanceof Error ? err.message : 'Invalid JSON body', 400);
+          if (err instanceof AppError) return sendStandardError(res, err);
+          return sendError(res, 'ValidationError', 'Invalid JSON body', 400);
         }
         const parsed = CreateSubjectSchema.safeParse(body);
         if (!parsed.success) {
@@ -222,7 +223,8 @@ export async function handleDomainRoutes(req: http.IncomingMessage, res: http.Se
         try {
           body = await parseJsonBody(req);
         } catch (err: unknown) {
-          return sendError(res, 'ValidationError', err instanceof Error ? err.message : 'Invalid JSON body', 400);
+          if (err instanceof AppError) return sendStandardError(res, err);
+          return sendError(res, 'ValidationError', 'Invalid JSON body', 400);
         }
         const parsed = UpdateSubjectSchema.safeParse(body);
         if (!parsed.success) {
@@ -291,7 +293,8 @@ export async function handleDomainRoutes(req: http.IncomingMessage, res: http.Se
         try {
           body = await parseJsonBody(req);
         } catch (err: unknown) {
-          return sendError(res, 'ValidationError', err instanceof Error ? err.message : 'Invalid JSON body', 400);
+          if (err instanceof AppError) return sendStandardError(res, err);
+          return sendError(res, 'ValidationError', 'Invalid JSON body', 400);
         }
         const parsed = CreateUnitSchema.safeParse(body);
         if (!parsed.success) {
@@ -338,7 +341,8 @@ export async function handleDomainRoutes(req: http.IncomingMessage, res: http.Se
         try {
           body = await parseJsonBody(req);
         } catch (err: unknown) {
-          return sendError(res, 'ValidationError', err instanceof Error ? err.message : 'Invalid JSON body', 400);
+          if (err instanceof AppError) return sendStandardError(res, err);
+          return sendError(res, 'ValidationError', 'Invalid JSON body', 400);
         }
         const parsed = UpdateUnitSchema.safeParse(body);
         if (!parsed.success) {
@@ -407,7 +411,8 @@ export async function handleDomainRoutes(req: http.IncomingMessage, res: http.Se
         try {
           body = await parseJsonBody(req);
         } catch (err: unknown) {
-          return sendError(res, 'ValidationError', err instanceof Error ? err.message : 'Invalid JSON body', 400);
+          if (err instanceof AppError) return sendStandardError(res, err);
+          return sendError(res, 'ValidationError', 'Invalid JSON body', 400);
         }
         const parsed = CreateTopicSchema.safeParse(body);
         if (!parsed.success) {
@@ -457,7 +462,8 @@ export async function handleDomainRoutes(req: http.IncomingMessage, res: http.Se
         try {
           body = await parseJsonBody(req);
         } catch (err: unknown) {
-          return sendError(res, 'ValidationError', err instanceof Error ? err.message : 'Invalid JSON body', 400);
+          if (err instanceof AppError) return sendStandardError(res, err);
+          return sendError(res, 'ValidationError', 'Invalid JSON body', 400);
         }
         const parsed = UpdateTopicSchema.safeParse(body);
         if (!parsed.success) {
@@ -534,7 +540,8 @@ export async function handleDomainRoutes(req: http.IncomingMessage, res: http.Se
         try {
           body = await parseJsonBody(req);
         } catch (err: unknown) {
-          return sendError(res, 'ValidationError', err instanceof Error ? err.message : 'Invalid JSON body', 400);
+          if (err instanceof AppError) return sendStandardError(res, err);
+          return sendError(res, 'ValidationError', 'Invalid JSON body', 400);
         }
         const parsed = CreateTaskSchema.safeParse(body);
         if (!parsed.success) {
@@ -582,7 +589,8 @@ export async function handleDomainRoutes(req: http.IncomingMessage, res: http.Se
         try {
           body = await parseJsonBody(req);
         } catch (err: unknown) {
-          return sendError(res, 'ValidationError', err instanceof Error ? err.message : 'Invalid JSON body', 400);
+          if (err instanceof AppError) return sendStandardError(res, err);
+          return sendError(res, 'ValidationError', 'Invalid JSON body', 400);
         }
         const parsed = UpdateTaskSchema.safeParse(body);
         if (!parsed.success) {
@@ -657,7 +665,8 @@ export async function handleDomainRoutes(req: http.IncomingMessage, res: http.Se
         try {
           body = await parseJsonBody(req);
         } catch (err: unknown) {
-          return sendError(res, 'ValidationError', err instanceof Error ? err.message : 'Invalid JSON body', 400);
+          if (err instanceof AppError) return sendStandardError(res, err);
+          return sendError(res, 'ValidationError', 'Invalid JSON body', 400);
         }
         const parsed = CreateExamSchema.safeParse(body);
         if (!parsed.success) {
@@ -700,7 +709,8 @@ export async function handleDomainRoutes(req: http.IncomingMessage, res: http.Se
         try {
           body = await parseJsonBody(req);
         } catch (err: unknown) {
-          return sendError(res, 'ValidationError', err instanceof Error ? err.message : 'Invalid JSON body', 400);
+          if (err instanceof AppError) return sendStandardError(res, err);
+          return sendError(res, 'ValidationError', 'Invalid JSON body', 400);
         }
         const parsed = UpdateExamSchema.safeParse(body);
         if (!parsed.success) {
@@ -766,7 +776,8 @@ export async function handleDomainRoutes(req: http.IncomingMessage, res: http.Se
         try {
           body = await parseJsonBody(req);
         } catch (err: unknown) {
-          return sendError(res, 'ValidationError', err instanceof Error ? err.message : 'Invalid JSON body', 400);
+          if (err instanceof AppError) return sendStandardError(res, err);
+          return sendError(res, 'ValidationError', 'Invalid JSON body', 400);
         }
         const parsed = CreateMaterialSchema.safeParse(body);
         if (!parsed.success) {
@@ -828,7 +839,8 @@ export async function handleDomainRoutes(req: http.IncomingMessage, res: http.Se
         try {
           body = await parseJsonBody(req);
         } catch (err: unknown) {
-          return sendError(res, 'ValidationError', err instanceof Error ? err.message : 'Invalid JSON body', 400);
+          if (err instanceof AppError) return sendStandardError(res, err);
+          return sendError(res, 'ValidationError', 'Invalid JSON body', 400);
         }
         const parsed = UpdateMaterialSchema.safeParse(body);
         if (!parsed.success) {

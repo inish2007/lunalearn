@@ -286,9 +286,11 @@ async function main() {
     console.log('\nℹ️  Live Supabase credentials not set in backend/.env.');
     const { LocalDevStore } = await import('../lib/local-store.js');
     const store=LocalDevStore.getInstance();
+    const email=process.env.DEMO_EMAIL, password=process.env.DEMO_PASSWORD;
+    if(!email || !password)throw new Error('Set DEMO_EMAIL and DEMO_PASSWORD to seed the local demo account.');
     let auth;
-    try { auth=await store.signIn({email:'aarav.patel@example.com',password:'password123'}); }
-    catch { auth=await store.signUp({email:'aarav.patel@example.com',password:'password123',full_name:'Aarav Patel',course:'Computer Science & Engineering',semester:4}); }
+    try { auth=await store.signIn({email,password}); }
+    catch { auth=await store.signUp({email,password,full_name:'Aarav Patel',course:'Computer Science & Engineering',semester:4}); }
     await seedDemoDataset(store.createClient(auth.user.id),auth.user.id);
     console.log('Local demo is saved. Use the explicitly labeled demo login.');
   }

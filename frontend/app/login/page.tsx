@@ -14,6 +14,7 @@ import {
   BookOpen
 } from 'lucide-react';
 import { useAcademic } from '@/lib/context/AcademicContext';
+import { ClientAppError } from '@/lib/api';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -78,7 +79,7 @@ export default function LoginPage() {
       // don't rely on the (stale) subjects closure here to decide onboarding.
       router.push('/dashboard');
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Authentication failed';
+      const msg = err instanceof ClientAppError ? (err.userMessage || err.message) : (err instanceof Error ? err.message : 'Authentication failed');
       setAuthError(msg);
     } finally {
       setSubmitting(false);

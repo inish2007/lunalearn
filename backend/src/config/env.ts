@@ -63,7 +63,7 @@ export function getEnv(): Env {
     SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY || 'placeholder-anon-key',
     SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY || 'placeholder-service-key',
     DATABASE_URL: process.env.DATABASE_URL,
-    CORS_ORIGINS: process.env.CORS_ORIGINS || 'http://localhost:3000',
+    CORS_ORIGINS: process.env.CORS_ORIGINS || 'http://localhost:3000,http://127.0.0.1:3000,http://localhost:3001,http://127.0.0.1:3001',
     GEMINI_API_KEY: process.env.GEMINI_API_KEY ? process.env.GEMINI_API_KEY.replace(/^['"]|['"]$/g, '').trim() : undefined,
     GEMINI_EMBEDDING_MODEL: process.env.GEMINI_EMBEDDING_MODEL?.trim(),
     GEMINI_CHAT_MODEL: process.env.GEMINI_CHAT_MODEL?.trim(),
